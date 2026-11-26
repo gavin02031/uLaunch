@@ -1,5 +1,6 @@
 #include <ul/menu/ui/ui_LockscreenMenuLayout.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
+#include <ul/menu/ui/ui_LiquidGlass.hpp>
 
 extern ul::menu::ui::GlobalSettings g_GlobalSettings;
 extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
@@ -7,6 +8,27 @@ extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 namespace ul::menu::ui {
 
     namespace {
+        // The existing glass images supply reflective rims and remain the
+        // fallback; the GPU lens sits underneath them and all lock content.
+        class LockGlass : public pu::ui::elm::Element {
+            pu::sdl2::TextureHandle::Ref wallpaper;
+            LiquidGlass material;
+        public:
+            explicit LockGlass(pu::sdl2::TextureHandle::Ref source):wallpaper(source) {}
+            PU_SMART_CTOR(LockGlass)
+            s32 GetX() override {return 0;}
+            s32 GetY() override {return 0;}
+            s32 GetWidth() override {return 1920;}
+            s32 GetHeight() override {return 1080;}
+            void OnRender(pu::ui::render::Renderer::Ref &,const s32,const s32) override {
+                auto rr=pu::ui::render::GetMainRenderer();
+                material.Prepare(rr,wallpaper?wallpaper->Get():nullptr,65,{36,32,74,0});
+                material.Draw(rr,480,500,960,150);
+                if(g_MenuApplication->GetNotificationHistory().size()>1)material.Draw(rr,480,665,960,150);
+                material.Draw(rr,600,875,720,120);
+            }
+            void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}
+        };
 
         inline void UnlockScreen() {
             if(accountUidIsValid(&g_GlobalSettings.system_status.selected_user)) {
@@ -26,6 +48,7 @@ namespace ul::menu::ui {
             auto scene=TryFindLoadImage("ui/GlassNX/Lockscreen");
             if(scene)this->SetBackgroundImage(pu::sdl2::TextureHandle::New(scene));
         }
+        this->Add(LockGlass::New(this->GetBackgroundImageTexture()));
         auto unlock_glass=TryFindLoadImage("ui/GlassNX/Unlock");
         if(unlock_glass)this->Add(pu::ui::elm::Image::New(600,875,pu::sdl2::TextureHandle::New(unlock_glass)));
         auto brand=pu::ui::elm::TextBlock::New(60,45,"GlassNX");
