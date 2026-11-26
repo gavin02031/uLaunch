@@ -17,6 +17,11 @@ namespace ul::menu::ui {
         int theme = 0;
         int glass = 65;
         int filter = 0;
+        int setting_section = 0;
+        void Section(int i);
+        void RoundedArt(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h,int radius);
+        void Segment(Renderer &r,int x,int y,int w,int h,const std::string &kind,const std::string &label,bool selected,std::function<void()> cb);
+        std::string StorageText() const;
         int blur = 65;
         bool motion = true;
         bool sort_name = false;

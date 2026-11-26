@@ -37,12 +37,12 @@ jobs:
         test -s SdOut/switch/GlassNXManager.nro
         cmp SdOut/glassnx/bin/uSystem/exefs.nsp SdOut/atmosphere/contents/0100000000001000/exefs.nsp
         grep -Fq '"/glassnx/bin/uMenu"' projects/uSystem/source/main.cpp
-        grep -aFq 'GlassNX v0.5' projects/uMenu/uMenu.elf
-        (cd SdOut && zip -r ../GlassNX-v0.5.zip atmosphere glassnx switch)
-        unzip -t GlassNX-v0.5.zip
+        grep -aFq 'GlassNX v0.6' projects/uMenu/uMenu.elf
+        (cd SdOut && zip -r ../GlassNX-v0.6.zip atmosphere glassnx switch)
+        unzip -t GlassNX-v0.6.zip
         
     - uses: actions/upload-artifact@master
       with:
-        name: GlassNX-v0.5
-        path: GlassNX-v0.5.zip
+        name: GlassNX-v0.6
+        path: GlassNX-v0.6.zip
         if-no-files-found: error

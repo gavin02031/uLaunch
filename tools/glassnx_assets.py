@@ -32,19 +32,27 @@ def png(path, pixel, size=None):
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
     print(f"GlassNX: {path.name}: {w}x{h}")
 
-def wallpaper(x, y, w, h):
-    u, v = x / w, y / h
-    # Smooth pastel pools, deep enough for white text contrast.
-    pink = math.exp(-((u-.12)**2*7+(v-.84)**2*5))
-    blue = math.exp(-((u-.86)**2*8+(v-.25)**2*5))
-    lilac = math.exp(-((u-.48)**2*7+(v-.42)**2*6))
-    wave = v - (.38 + .27*math.sin(u*3.6+.35))
-    wave2 = v - (.92 - .46*u + .09*math.sin(u*5))
-    sheen = 17*math.exp(-abs(wave)*52) + 14*math.exp(-abs(wave2)*45)
-    band = 14*math.exp(-wave*wave*34) + 10*math.exp(-wave2*wave2*45)
-    return (clamp(60+94*pink+18*blue+35*lilac+sheen+band),
-            clamp(70+42*pink+65*blue+24*lilac+sheen+band),
-            clamp(121+48*pink+69*blue+48*lilac+sheen+band),255)
+def wallpaper(x,y,w,h):
+    u,v=x/w,y/h
+    pink=math.exp(-((u-.11)**2*10+(v-.78)**2*6))
+    blue=math.exp(-((u-.89)**2*9+(v-.26)**2*6))
+    violet=math.exp(-((u-.47)**2*7+(v-.11)**2*8))
+    r=39+65*pink+25*violet+13*blue
+    g=41+25*pink+22*violet+58*blue
+    b=85+36*pink+60*violet+62*blue
+    # Overlapping curved, translucent sheets with a directional specular seam.
+    for i in range(3):
+        center=(.22+i*.29)+.17*math.sin(u*4.4+i*.85)-.16*u
+        d=v-center
+        body=math.exp(-((d-.048)/.115)**2)
+        seam=math.exp(-((d+.008)/.0065)**2)
+        soft=math.exp(-((d+.013)/.033)**2)
+        shadow=math.exp(-((d-.123)/.045)**2)
+        strength=.65+.35*math.sin(u*2.9+i*.5)**2
+        r+=strength*(body*(22+i*4)+seam*39+soft*13-shadow*12)
+        g+=strength*(body*(20+i*6)+seam*42+soft*12-shadow*12)
+        b+=strength*(body*31+seam*39+soft*12-shadow*9)
+    return clamp(r),clamp(g),clamp(b),255
 
 def signed_distance(x, y, w, h, radius, inset):
     qx = abs(x+.5-w*.5) - (w*.5-inset-radius)
@@ -60,11 +68,11 @@ def glass(x, y, w, h, outline=False, subtle=False):
         a = 220*math.exp(-((d+4)/2.7)**2) + 95*math.exp(-((d+4)/10)**2)
         return (219,230,255,clamp(a))
     coverage = min(1,max(0,.5-d))
-    rim = math.exp(-abs(d+2)*.47)
-    bevel = math.exp(-abs(d+7)*.15)
-    base = (38 if subtle else 78) + 20*(1-v)
-    a = coverage*(base+rim*117+bevel*19)
-    return (clamp(184+55*rim),clamp(195+48*rim),clamp(240+15*rim),clamp(a))
+    rim = math.exp(-abs(d+1)*1.05)
+    bevel = math.exp(-abs(d+4)*.35)
+    base = (36 if subtle else 62) + 16*(1-v)
+    a = coverage*(base+rim*82*(1-.65*v)+bevel*14)
+    return (clamp(108+110*rim),clamp(119+110*rim),clamp(183+61*rim),clamp(a))
 
 def landscape(x,y,w,h):
     u,v=x/w,y/h
