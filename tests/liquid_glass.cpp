@@ -20,6 +20,8 @@ int main() {
         pixels[p]=(x/4)%2?240:20;pixels[p+1]=y;pixels[p+2]=180;pixels[p+3]=255;
     }
     assert(SDL_UpdateTexture(wallpaper,nullptr,pixels.data(),240*4)==0);
+    SDL_SetTextureColorMod(wallpaper,80,90,100);SDL_SetTextureAlphaMod(wallpaper,32);
+    SDL_SetTextureBlendMode(wallpaper,SDL_BLENDMODE_BLEND);
     {
         ul::menu::ui::LiquidGlass material;
         assert(!material.Draw(renderer,0,0,100,100));
@@ -41,6 +43,9 @@ int main() {
             Uint8 r,g,b,a;SDL_GetRenderDrawColor(renderer,&r,&g,&b,&a);
             assert(r==15 && g==25 && b==35 && a==45);
             SDL_BlendMode mode;SDL_GetRenderDrawBlendMode(renderer,&mode);assert(mode==SDL_BLENDMODE_BLEND);
+            Uint8 wr,wg,wb,wa;SDL_GetTextureColorMod(wallpaper,&wr,&wg,&wb);SDL_GetTextureAlphaMod(wallpaper,&wa);
+            assert(wr==80 && wg==90 && wb==100 && wa==32);
+            SDL_GetTextureBlendMode(wallpaper,&mode);assert(mode==SDL_BLENDMODE_BLEND);
             assert(material.Draw(renderer,70,225,380,330));
         }
         // Draw into an isolated target to check rounded corner coverage.

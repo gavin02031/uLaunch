@@ -30,7 +30,16 @@ namespace ul::menu::ui {
         SDL_SetRenderDrawColor(rr,0,0,0,255);
         SDL_RenderClear(rr);
         SDL_Rect full{0,0,240,135};
+        // The UI may have alpha-modulated this shared wallpaper for a fade.
+        // Bake unmodulated pixels and leave the caller's texture state intact.
+        Uint8 wr=255,wg=255,wb=255,wa=255;SDL_BlendMode wallpaper_blend=SDL_BLENDMODE_NONE;
+        SDL_GetTextureColorMod(wallpaper,&wr,&wg,&wb);SDL_GetTextureAlphaMod(wallpaper,&wa);
+        SDL_GetTextureBlendMode(wallpaper,&wallpaper_blend);
+        SDL_SetTextureColorMod(wallpaper,255,255,255);SDL_SetTextureAlphaMod(wallpaper,255);
+        SDL_SetTextureBlendMode(wallpaper,SDL_BLENDMODE_NONE);
         ok=ok && SDL_RenderCopy(rr,wallpaper,nullptr,&full)==0;
+        SDL_SetTextureColorMod(wallpaper,wr,wg,wb);SDL_SetTextureAlphaMod(wallpaper,wa);
+        SDL_SetTextureBlendMode(wallpaper,wallpaper_blend);
         if(tint.a) {
             SDL_SetRenderDrawBlendMode(rr,SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(rr,tint.r,tint.g,tint.b,tint.a);
@@ -72,9 +81,9 @@ namespace ul::menu::ui {
     }
     bool LiquidGlass::Draw(SDL_Renderer *rr,int x,int y,int w,int h) {
         if(!texture || w<=0 || h<=0)return false;
-        // Rounded fan with displaced perimeter UVs: a curved lens at the rim,
+        // Rounded inner fan and refractive outer ring: a curved lens at the rim,
         // smooth wallpaper at the center. Fixed geometry cost for every panel.
-        SDL_Vertex v[49]{};
+        SDL_Vertex v[97]{};
         static const auto perimeter=[] {
             std::array<SDL_FPoint,48> points{};
             for(int c=0;c<4;c++)for(int i=0;i<12;i++) {
@@ -84,11 +93,16 @@ namespace ul::menu::ui {
             return points;
         }();
         static const auto indices=[] {
-            std::array<int,144> values{};
-            for(int i=0;i<48;i++){values[i*3]=0;values[i*3+1]=i+1;values[i*3+2]=(i+1)%48+1;}
+            std::array<int,432> values{};
+            for(int i=0;i<48;i++) {
+                const int next=(i+1)%48;
+                const int tris[]={0,1+i,1+next,1+i,49+i,49+next,1+i,49+next,1+next};
+                std::copy_n(tris,9,values.data()+i*9);
+            }
             return values;
         }();
-        const float radius=std::min(40.f,h*.5f);
+        const float radius=std::min(40.f,std::min(w,h)*.5f);
+        const float inner_radius=radius-std::min(12.f,radius*.5f);
         auto vertex=[&](float px,float py,bool edge) {
             const float dx=edge?(px-w*.5f)*.018f:0;
             const float dy=edge?(py-h*.5f)*.018f:0;
@@ -99,9 +113,10 @@ namespace ul::menu::ui {
         const float cx[]={w-radius,w-radius,radius,radius},cy[]={radius,h-radius,h-radius,radius};
         for(int c=0;c<4;c++)for(int i=0;i<12;i++) {
             const auto point=perimeter[c*12+i];
-            v[1+c*12+i]=vertex(cx[c]+radius*point.x,cy[c]+radius*point.y,true);
+            v[1+c*12+i]=vertex(cx[c]+inner_radius*point.x,cy[c]+inner_radius*point.y,false);
+            v[49+c*12+i]=vertex(cx[c]+radius*point.x,cy[c]+radius*point.y,true);
         }
-        if(SDL_RenderGeometry(rr,texture.get(),v,49,indices.data(),144)==0)return true;
+        if(SDL_RenderGeometry(rr,texture.get(),v,97,indices.data(),432)==0)return true;
         texture.reset();unavailable=true;return false;
     }
 }

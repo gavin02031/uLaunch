@@ -287,7 +287,9 @@ namespace ul::menu::ui {
         if(t && t->Get()) r->RenderTexture(t->Get(),x,y,pu::ui::render::TextureRenderOptions({},w,h,{},{},{}));
     }
     pu::sdl2::TextureHandle::Ref GlassShell::Material(int x,int y,int w,int h,bool selected) {
-        const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected)+"/"+std::to_string(liquid_glass.IsReady());
+        // GPU bevels are position independent; reuse one for equal-size panels.
+        const bool gpu=liquid_glass.IsReady();
+        const auto key=std::to_string(gpu?0:x)+"/"+std::to_string(gpu?0:y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected)+"/"+std::to_string(gpu);
         auto it=materials.find(key);if(it!=materials.end())return it->second;
         // Cache at one-third logical resolution; the GPU composites the translucent
         // textured bevel. No per-frame rasterization or framebuffer readback.
@@ -318,7 +320,7 @@ namespace ul::menu::ui {
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
                 float bg=tc;
-                if(!liquid_glass.IsReady() && !backdrop.empty()) {
+                if(!gpu && !backdrop.empty()) {
                     unsigned sum=0;
                     for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
                         sum+=backdrop[(std::clamp(sy+dy*radius_sample,0,134)*240+std::clamp(sx+dx*radius_sample,0,239))*4+k];
@@ -330,7 +332,7 @@ namespace ul::menu::ui {
                 const float colored=bg*.62f+tc*.38f;
                 rgba[p+k]=byte(colored+(255-colored)*shine);
             }
-            const float base=liquid_glass.IsReady()?30.f:70.f;
+            const float base=gpu?30.f:70.f;
             rgba[p+3]=byte(cover*((100-glass)*1.15f+base+14*(1-v)+rim*(selected?105:56)+light*10));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
