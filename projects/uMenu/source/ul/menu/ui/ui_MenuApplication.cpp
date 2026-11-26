@@ -293,9 +293,48 @@ namespace ul::menu::ui {
     }
 
     void MenuApplication::ShowNotification(const std::string &text, const u64 timeout) {
+        if(text.empty()) return;
+        if(this->glassnx_notifications.empty() || this->glassnx_notifications.back() != text) {
+            if(this->glassnx_notifications.size() >= 24) {
+                this->glassnx_notifications.erase(this->glassnx_notifications.begin());
+            }
+            this->glassnx_notifications.push_back(text);
+        }
         this->EndOverlay();
         this->notif_toast->SetText(text);
         this->StartOverlayWithTimeout(this->notif_toast, timeout);
+    }
+
+    void MenuApplication::CheckBatteryNotification(const u32 percent, const bool charging) {
+        if(charging || percent >= 25) {
+            this->glassnx_low_battery_notified = false;
+        }
+        else if(percent <= 15 && !this->glassnx_low_battery_notified) {
+            this->glassnx_low_battery_notified = true;
+            this->ShowNotification("Low battery: " + std::to_string(percent) + "% remaining.");
+        }
+    }
+
+    void MenuApplication::ShowNotificationHistory() {
+        this->EndOverlay();
+        // Snapshot because a dialog can process input and service events.
+        const auto history = this->glassnx_notifications;
+        if(history.empty()) {
+            this->DisplayDialog("Notifications", "You're all caught up.", {"Close"}, true);
+            return;
+        }
+        size_t index = history.size() - 1;
+        while(true) {
+            const auto title = "Notifications  " + std::to_string(history.size()-index) + "/" + std::to_string(history.size());
+            const auto option = this->DisplayDialog(title, history[index], {"Older", "Newer", "Clear history", "Close"}, true);
+            if(option == 0 && index > 0) --index;
+            else if(option == 1 && index + 1 < history.size()) ++index;
+            else if(option == 2) {
+                this->glassnx_notifications.clear();
+                return;
+            }
+            else if(option != 0 && option != 1) return;
+        }
     }
 
     void MenuApplication::StartPlayBgm() {

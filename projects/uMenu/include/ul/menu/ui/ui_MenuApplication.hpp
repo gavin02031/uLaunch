@@ -37,6 +37,8 @@ namespace ul::menu::ui {
             SettingsMenuLayout::Ref settings_menu_lyt;
             LockscreenMenuLayout::Ref lockscreen_menu_lyt;
             pu::ui::extras::Toast::Ref notif_toast;
+            std::vector<std::string> glassnx_notifications;
+            bool glassnx_low_battery_notified = false;
             bool launch_failed;
             Result pending_gc_mount_rc;
             bool needs_app_records_reload;
@@ -216,7 +218,9 @@ namespace ul::menu::ui {
                 this->active_theme_outdated = false;
             }
 
-            void ShowNotification(const std::string &text, const u64 timeout = 1500);
+            void ShowNotification(const std::string &text, const u64 timeout = 3000);
+            void ShowNotificationHistory();
+            void CheckBatteryNotification(const u32 percent, const bool charging);
 
             inline pu::ui::Color GetTextColor() {
                 return this->text_clr;

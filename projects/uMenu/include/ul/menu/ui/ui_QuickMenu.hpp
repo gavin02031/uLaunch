@@ -7,7 +7,7 @@ namespace ul::menu::ui {
 
     class QuickMenu : public pu::ui::elm::Element {
         public:
-            static constexpr u8 BackgroundAlphaMax = 220;
+            static constexpr u8 BackgroundAlphaMax = 165;
             static constexpr u8 BackgroundAlphaIncrement = 20;
 
             static constexpr u32 MenuMargin = 300;
@@ -18,7 +18,7 @@ namespace ul::menu::ui {
             static constexpr u32 MenuItemsToShow = 9;
 
             static inline constexpr pu::ui::Color MakeBackgroundColor(const u8 alpha) {
-                return { 50, 50, 50, alpha };
+                return { 38, 43, 82, alpha };
             }
 
         private:

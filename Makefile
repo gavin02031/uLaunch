@@ -63,6 +63,7 @@ umenu: arc libs
 	@cp assets/Logo.png projects/uMenu/romfs/Logo.png
 	@rm -rf projects/uMenu/romfs/default
 	@cp -r default-theme/ projects/uMenu/romfs/default/
+	@python3 tools/glassnx_assets.py projects/uMenu/romfs/default/ui
 	@build_romfs projects/uMenu/romfs $(OUT_DIR)/ulaunch/bin/uMenu/romfs.bin
 
 umanager: arc libs

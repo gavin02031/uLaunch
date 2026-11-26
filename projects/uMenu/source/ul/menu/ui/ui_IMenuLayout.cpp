@@ -118,6 +118,7 @@ namespace ul::menu::ui {
     void IMenuLayout::UpdateBatteryTextAndTopIcons(pu::ui::elm::TextBlock::Ref &text, pu::ui::elm::Image::Ref &base_top_icon, pu::ui::elm::Image::Ref &charging_top_icon) {
         const auto battery_level = os::GetBatteryLevel();
         const auto is_charging = os::IsConsoleCharging();
+        g_MenuApplication->CheckBatteryNotification(battery_level, is_charging);
         if((this->last_battery_level != battery_level) || (this->last_battery_is_charging != is_charging)) {
             this->last_battery_level = battery_level;
             this->last_battery_is_charging = is_charging;

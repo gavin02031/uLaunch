@@ -25,6 +25,11 @@ namespace ul::menu::ui {
         this->options_menu = pu::ui::elm::Menu::New(MenuX, MenuY, MenuWidth, g_MenuApplication->GetMenuBackgroundColor(), g_MenuApplication->GetMenuFocusColor(), MenuItemHeight, MenuItemsToShow);
         g_GlobalSettings.ApplyConfigForElement("quick_menu", "quick_menu", this->options_menu);
 
+        auto notifications = pu::ui::elm::MenuItem::New("Notifications");
+        notifications->SetColor(g_MenuApplication->GetTextColor());
+        notifications->AddOnKey([]() { g_MenuApplication->ShowNotificationHistory(); });
+        this->options_menu->AddItem(notifications);
+
         this->power_menu_item = pu::ui::elm::MenuItem::New(GetLanguageString("quick_power_options"));
         this->power_menu_item->SetIcon(TryFindLoadImageHandle("ui/Main/QuickIcon/Power"));
         this->power_menu_item->AddOnKey(&ShowPowerDialog);
