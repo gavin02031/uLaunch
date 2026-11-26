@@ -220,6 +220,7 @@ namespace ul::menu::ui {
 
             void ShowNotification(const std::string &text, const u64 timeout = 3000);
             void ShowNotificationHistory();
+            const std::vector<std::string> &GetNotificationHistory() const { return this->glassnx_notifications; }
             void CheckBatteryNotification(const u32 percent, const bool charging);
 
             inline pu::ui::Color GetTextColor() {

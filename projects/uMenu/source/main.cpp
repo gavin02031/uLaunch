@@ -258,6 +258,8 @@ namespace {
             renderer_opts.AddDefaultSharedFont(PlSharedFontType_KO);
         }
         renderer_opts.AddDefaultSharedFont(PlSharedFontType_NintendoExt);
+        renderer_opts.AddExtraDefaultFontSize(64);
+        renderer_opts.AddExtraDefaultFontSize(112);
         renderer_opts.UseImage(pu::ui::render::ImgAllFlags);
 
         auto renderer = pu::ui::render::Renderer::New(renderer_opts);

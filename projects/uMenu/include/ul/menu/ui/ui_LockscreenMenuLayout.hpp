@@ -7,6 +7,8 @@ namespace ul::menu::ui {
     class LockscreenMenuLayout : public IMenuLayout {
         private:
             pu::ui::elm::TextBlock::Ref info_text;
+            pu::ui::elm::TextBlock::Ref notification_text;
+            pu::ui::elm::TextBlock::Ref notification_heading;
             pu::ui::elm::Image::Ref connection_top_icon;
             MultiTextBlock::Ref time_mtext;
             pu::ui::elm::TextBlock::Ref date_text;

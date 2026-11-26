@@ -30,6 +30,20 @@ namespace ul::menu::ui {
         this->Add(this->connection_top_icon);
 
         this->InitializeTimeText(this->time_mtext, "lockscreen_menu", "time_text");
+        for(auto &part : this->time_mtext->GetAll()) part->SetFont(pu::ui::MakeDefaultFontName(112));
+        this->time_mtext->UpdatePositionsSizes();
+
+        this->notification_heading = pu::ui::elm::TextBlock::New(0, 594, "Notifications");
+        this->notification_heading->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
+        this->notification_heading->SetColor({255,255,255,255});
+        this->notification_heading->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
+        this->Add(this->notification_heading);
+        this->notification_text = pu::ui::elm::TextBlock::New(0, 650, "You're all caught up.");
+        this->notification_text->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
+        this->notification_text->SetColor({255,255,255,255});
+        this->notification_text->SetClampWidth(1100);
+        this->notification_text->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
+        this->Add(this->notification_text);
 
         this->date_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         this->date_text->SetColor(g_MenuApplication->GetTextColor());
@@ -51,8 +65,12 @@ namespace ul::menu::ui {
     }
 
     void LockscreenMenuLayout::OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) {
-        if(keys_down != 0) {
+        const auto &history = g_MenuApplication->GetNotificationHistory();
+        const auto message = history.empty() ? std::string("You're all caught up.") : history.back();
+        if(this->notification_text->GetText() != message) this->notification_text->SetText(message);
+        if((keys_down & HidNpadButton_A) || touch_pos.HitsRegion(640, 750, 640, 160)) {
             UnlockScreen();
+            return;
         }
 
         this->UpdateConnectionTopIcon(this->connection_top_icon);

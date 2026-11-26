@@ -768,11 +768,21 @@ namespace ul::menu::ui {
         });
         g_GlobalSettings.ApplyConfigForElement("main_menu", "entry_menu", this->entry_menu);
         this->Add(this->entry_menu);
+        this->glass_shell = GlassShell::New(this->entry_menu, [this](u32 index) {
+            if(this->entry_menu->GlassFocus(index)) {
+                if(this->entry_menu->IsFocusedEntrySuspended()) this->StartResume();
+                else this->menu_EntryInputPressed(HidNpadButton_A);
+            }
+        }, [this]() {
+            this->SetGlassMode(false);
+        });
+        this->Add(this->glass_shell);
 
         this->Add(GetScreenCaptureBackground());
 
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
+        this->SetGlassMode(true);
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
@@ -845,8 +855,23 @@ namespace ul::menu::ui {
         pu::audio::DestroySfx(this->error_sfx);
     }
 
+    void MainMenuLayout::SetGlassMode(bool enabled) {
+        this->glass_mode = enabled;
+        this->glass_shell->SetVisible(enabled);
+        this->entry_menu->SetVisible(!enabled);
+        this->entry_menu->SetEnabled(!enabled);
+        this->quick_menu->SetVisible(!enabled);
+        this->logo_top_icon->SetVisible(!enabled);
+        if(enabled) this->entry_menu->ResetSelection();
+        this->input_bar_changed = true;
+    }
+
     void MainMenuLayout::OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) {
-        const auto quick_menu_on = this->quick_menu->IsOn();
+        if(!this->glass_mode && (keys_down & HidNpadButton_Minus) && (keys_held & HidNpadButton_Plus) && !this->quick_menu->IsOn()) {
+            this->SetGlassMode(true);
+            return;
+        }
+        const auto quick_menu_on = !this->glass_mode && this->quick_menu->IsOn();
         if(this->last_quick_menu_on != quick_menu_on) {
             this->last_quick_menu_on = quick_menu_on;
             this->entry_menu->SetEnabled(!quick_menu_on);
@@ -1029,6 +1054,11 @@ namespace ul::menu::ui {
             ReloadApplicationEntryInfos(this->entry_menu->GetEntries());
         }
 
+        if(this->glass_mode) {
+            if(IsScreenCaptureBackgroundNotTransitioning()) this->glass_shell->HandleInput(keys_down, touch_pos);
+            return;
+        }
+
         if(keys_down & HidNpadButton_Minus) {
             if(!this->is_incrementing_decrementing && this->entry_menu->CanDecrementEntryHeightCount()) {
                 pu::audio::PlaySfx(this->menu_decrement_sfx);
@@ -1097,6 +1127,7 @@ namespace ul::menu::ui {
         UL_RC_ASSERT(acc::GetAccountName(g_GlobalSettings.system_status.selected_user, g_UserName));
         this->entry_menu->Initialize(g_GlobalSettings.system_status.last_menu_index, this->next_reload_user_changed ? g_GlobalSettings.system_status.last_menu_fs_path : "");
         this->quick_menu->UpdateItems();
+        this->glass_shell->Invalidate();
         this->next_reload_user_changed = false;
     }
 

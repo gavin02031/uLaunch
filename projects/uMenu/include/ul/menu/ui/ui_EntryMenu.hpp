@@ -212,6 +212,24 @@ namespace ul::menu::ui {
                 return this->cur_entries;
             }
 
+            // GlassNX uses the same entry indices and upstream launch handlers.
+            bool GlassFocus(const u32 index) {
+                if(index >= this->cur_entries.size() || this->cur_entries[index].Is<EntryType::Invalid>()) return false;
+                const auto old_index = this->cur_entry_idx;
+                this->SetFocusedEntryIndex(index);
+                this->NotifyFocusedEntryChanged(old_index);
+                return true;
+            }
+
+            pu::sdl2::TextureHandle::Ref GlassIcon(const u32 index, bool &load_budget) {
+                if(index >= this->cur_entries.size() || index >= this->entry_icons.size()) return {};
+                if(!this->entry_icons[index] && load_budget) {
+                    load_budget = false;
+                    this->LoadEntry(index);
+                }
+                return this->entry_icons[index];
+            }
+
             bool IsInRoot();
 
             inline bool IsMenuStart() {

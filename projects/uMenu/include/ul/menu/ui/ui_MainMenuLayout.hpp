@@ -7,6 +7,7 @@
 #include <ul/menu/ui/ui_QuickMenu.hpp>
 #include <ul/menu/ui/ui_InputBar.hpp>
 #include <ul/menu/ui/ui_EntryMenu.hpp>
+#include <ul/menu/ui/ui_GlassShell.hpp>
 #include <ul/menu/ui/ui_Common.hpp>
 #include <ul/menu/menu_Entries.hpp>
 #include <ul/cfg/cfg_Config.hpp>
@@ -22,6 +23,9 @@ namespace ul::menu::ui {
 
         private:
             bool last_quick_menu_on;
+            GlassShell::Ref glass_shell;
+            bool glass_mode = true;
+            void SetGlassMode(bool enabled);
             pu::ui::elm::Image::Ref top_menu_default_bg;
             pu::ui::elm::Image::Ref top_menu_folder_bg;
             pu::ui::elm::Image::Ref top_menu_app_bg;
