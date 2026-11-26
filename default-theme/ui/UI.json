@@ -132,7 +132,7 @@
     "lockscreen_menu": {
         "info_text": {
             "h_align": "center",
-            "y": 837,
+            "y": 895,
             "font_size": "medium"
         },
         "connection_top_icon": {
@@ -141,12 +141,12 @@
         },
         "time_text": {
             "h_align": "center",
-            "y": 282,
+            "y": 155,
             "font_size": "large"
         },
         "date_text": {
             "h_align": "center",
-            "y": 432,
+            "y": 385,
             "font_size": "medium"
         },
         "battery_text": {

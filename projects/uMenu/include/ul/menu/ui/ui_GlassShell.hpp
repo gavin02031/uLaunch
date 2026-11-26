@@ -1,5 +1,6 @@
 #pragma once
 #include <ul/menu/ui/ui_EntryMenu.hpp>
+#include <ul/menu/ui/ui_LiquidGlass.hpp>
 #include <map>
 
 namespace ul::menu::ui {
@@ -51,6 +52,7 @@ namespace ul::menu::ui {
         void ReadRecent();
         void SaveRecent();
         std::vector<u8> backdrop;
+        LiquidGlass liquid_glass;
         std::chrono::steady_clock::time_point transition{};
         pu::sdl2::TextureHandle::Ref banner;
         u64 banner_id = 0;

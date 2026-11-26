@@ -232,7 +232,7 @@ namespace {
         // Get system language and load translations (default one if not present)
         ul::cfg::LoadLanguageJsons(ul::MenuLanguagesPath, g_GlobalSettings.main_lang, g_GlobalSettings.default_lang);
 
-        auto renderer_opts = pu::ui::render::RendererInitOptions(SDL_INIT_EVERYTHING, pu::ui::render::RendererHardwareFlags);
+        auto renderer_opts = pu::ui::render::RendererInitOptions(SDL_INIT_EVERYTHING, pu::ui::render::RendererHardwareFlags, 1280, 720);
         renderer_opts.SetPlServiceType(PlServiceType_User);
         renderer_opts.SetInputPlayerCount(8);
         renderer_opts.AddInputNpadStyleTag(HidNpadStyleSet_NpadStandard);
@@ -259,7 +259,7 @@ namespace {
         }
         renderer_opts.AddDefaultSharedFont(PlSharedFontType_NintendoExt);
         renderer_opts.AddExtraDefaultFontSize(64);
-        renderer_opts.AddExtraDefaultFontSize(112);
+        renderer_opts.AddExtraDefaultFontSize(220);
         renderer_opts.UseImage(pu::ui::render::ImgAllFlags);
 
         auto renderer = pu::ui::render::Renderer::New(renderer_opts);
@@ -271,6 +271,11 @@ namespace {
         ul::menu::ui::RegisterMenuOnMessageDetect();
         UL_RC_ASSERT(ul::menu::smi::sf::InitializePrivateService());
         UL_RC_ASSERT(g_MenuApplication->Load());
+
+        // Keep the established 1920x1080 layout/touch coordinates while drawing
+        // a native 720p framebuffer (44% of the previous pixel workload).
+        SDL_RenderSetScale(pu::ui::render::GetMainRenderer(), 2.f/3.f, 2.f/3.f);
+
 
         // Initialize uSystem message handling (need to do it after Load so that the message handlers are registered)
         // UL_RC_ASSERT(ul::menu::smi::sf::InitializePrivateService()); 

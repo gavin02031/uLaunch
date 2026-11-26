@@ -287,9 +287,9 @@ namespace ul::menu::ui {
         if(t && t->Get()) r->RenderTexture(t->Get(),x,y,pu::ui::render::TextureRenderOptions({},w,h,{},{},{}));
     }
     pu::sdl2::TextureHandle::Ref GlassShell::Material(int x,int y,int w,int h,bool selected) {
-        const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected);
+        const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected)+"/"+std::to_string(liquid_glass.IsReady());
         auto it=materials.find(key);if(it!=materials.end())return it->second;
-        // Cache at half logical resolution; the GPU composites the translucent
+        // Cache at one-third logical resolution; the GPU composites the translucent
         // textured bevel. No per-frame rasterization or framebuffer readback.
         const int tw=(w+2)/3,th=(h+2)/3;
         const float radius=std::min(13.f,th/2.f-1.f);
@@ -306,10 +306,11 @@ namespace ul::menu::ui {
             const float rim=std::max(0.f,1.f-std::abs(d+.65f)/1.25f);
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float angle=.28f+.72f*(1-v)*(1-v);
-            const float shine=(1.f-v)*.035f+rim*(selected?.58f:.28f)*angle+light*.045f;
+            const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
+            const float shine=(1.f-v)*.045f+reflection*.035f+rim*(selected?.68f:.42f)*angle+light*.065f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
-            // Sample the real wallpaper with a low-frequency blur and edge
-            // displacement. Cached per panel position, never reads the GPU framebuffer.
+            // CPU wallpaper sampling is only the compatibility fallback. On the
+            // GPU path this texture contains tint and specular lighting alone.
             const float edge=std::max(0.f,1.f-std::abs(d)/6.f);
             const int sx=std::clamp(int((x+px*3+(px-tw*.5f)*edge*.11f)/8.f),0,239);
             const int sy=std::clamp(int((y+py*3+(py-th*.5f)*edge*.11f)/8.f),0,134);
@@ -317,7 +318,7 @@ namespace ul::menu::ui {
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
                 float bg=tc;
-                if(!backdrop.empty()) {
+                if(!liquid_glass.IsReady() && !backdrop.empty()) {
                     unsigned sum=0;
                     for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
                         sum+=backdrop[(std::clamp(sy+dy*radius_sample,0,134)*240+std::clamp(sx+dx*radius_sample,0,239))*4+k];
@@ -329,7 +330,8 @@ namespace ul::menu::ui {
                 const float colored=bg*.62f+tc*.38f;
                 rgba[p+k]=byte(colored+(255-colored)*shine);
             }
-            rgba[p+3]=byte(cover*((100-glass)*1.15f+70+14*(1-v)+rim*(selected?105:56)+light*10));
+            const float base=liquid_glass.IsReady()?30.f:70.f;
+            rgba[p+3]=byte(cover*((100-glass)*1.15f+base+14*(1-v)+rim*(selected?105:56)+light*10));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
         if(!tex)return {};
@@ -339,7 +341,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::Card(Renderer &r,int x,int y,int w,int h,bool selected) {
         const int radius=std::min(40,h/2);
-        r->RenderRoundedRectangleFill({18,18,47,45},x,y+5,w,h,radius);
+        r->RenderRoundedRectangleFill({29,25,66,18},x-4,y+12,w+8,h,radius+4);
+        r->RenderRoundedRectangleFill({18,18,47,32},x,y+5,w,h,radius);
+        liquid_glass.Draw(pu::ui::render::GetMainRenderer(),x,y,w,h);
         const auto tex=Material(x,y,w,h,selected);
         if(tex)Picture(r,tex,x,y,w,h);
         else {
@@ -348,6 +352,7 @@ namespace ul::menu::ui {
             r->RenderRoundedRectangle({233,239,255,135},x,y,w,h,radius);
         }
         if(selected) {
+            r->RenderRoundedRectangle({141,219,255,42},x-7,y-7,w+14,h+14,radius+7);
             r->RenderRoundedRectangle({178,203,255,155},x-3,y-3,w+6,h+6,radius+3);
             r->RenderRoundedRectangle({237,243,255,225},x,y,w,h,radius);
         }
@@ -360,7 +365,7 @@ namespace ul::menu::ui {
             if(texts.size()>=160) texts.clear();
             auto t=pu::ui::elm::TextBlock::New(0,0,s);
             t->SetFont(pu::ui::MakeDefaultFontName(size));
-            t->SetColor({255,255,255,255});
+            t->SetColor(size<30?pu::ui::Color{231,238,255,235}:pu::ui::Color{255,255,255,255});
             // Fit once when caching rather than letting long titles marquee
             // into an arbitrary cropped middle. Preserve UTF-8 boundaries.
             if(maxw>0 && t->GetWidth()>maxw) {
@@ -421,6 +426,8 @@ namespace ul::menu::ui {
         else if(kind=="album"){box(2,3,20,18);line(3,19,10,10);line(10,10,15,16);line(15,16,19,11);dot(17,7,2);}
         else if(kind=="battery"){box(2,6,18,12);r->RenderRectangleFill(white,x+size*20/24,y+size*10/24,size*2/24,size*4/24);}
         else if(kind=="storage"){box(3,5,18,14);line(5,14,19,14);dot(17,17,1);}
+        else if(kind=="clock"){r->RenderCircle(white,x+size/2,y+size/2,size*2/5);line(12,5,12,12);line(12,12,17,15);}
+        else if(kind=="star"){for(int i=0;i<10;i++){float a=(-90+i*36)*3.14159265f/180,b=(-90+(i+1)*36)*3.14159265f/180;float ra=i%2?4.5f:10.f,rb=i%2?10.f:4.5f;line(12+int(ra*cosf(a)),12+int(ra*sinf(a)),12+int(rb*cosf(b)),12+int(rb*sinf(b)));}}
         else if(kind=="search"){r->RenderCircle(white,x+size*9/24,y+size*9/24,size*7/24);line(14,14,22,22);}
         else {box(3,3,18,18);dot(12,12,2);}
     }
@@ -497,7 +504,11 @@ namespace ul::menu::ui {
         r->RenderRoundedRectangleFill({15,20,45,65},ix,iy+5,side,side,rounding);
         if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
         else {Card(r,ix,iy,side,side);Glyph(r,e.Is<EntryType::Folder>()?"storage":"apps",x+w/2-34,y+h/2-55,68);}
-        if(selected)r->RenderRoundedRectangle({224,236,255,225},ix-3,iy-3,side+6,side+6,rounding+3);
+        if(selected) {
+            r->RenderRoundedRectangle({125,212,255,48},ix-8,iy-8,side+16,side+16,rounding+8);
+            r->RenderRoundedRectangle({164,225,255,115},ix-5,iy-5,side+10,side+10,rounding+5);
+            r->RenderRoundedRectangle({240,249,255,255},ix-2,iy-2,side+4,side+4,rounding+2);
+        }
         const auto name=EntryName(e);
         Label(r,name,x+w/2,y+h-35,27,w-10,true);
         if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id)) {
@@ -581,15 +592,17 @@ namespace ul::menu::ui {
     }
     void GlassShell::Slider(Renderer &r,int x,int y,int w,int h,const std::string &name,float value,bool selected) {
         Card(r,x,y,w,h,selected);
-        Label(r,name,x+w/2,y+22,30,w-18,true);
-        Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w/2,y+70,30,0,true);
-        const int left=x+46,top=y+115,width=w-92,height=h-166;
-        r->RenderRoundedRectangleFill({32,38,74,110},left,top,width,height,std::min(34,width/2));
+        Glyph(r,name=="Brightness"?"sun":"volume",x+28,y+46,48);
+        Label(r,name,x+100,y+18,27);
+        Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w-85,y+58,30);
+        const int left=x+100,top=y+65,width=w-220;
+        r->RenderRoundedRectangleFill({45,51,105,95},left,top,width,32,16);
         if(value>=0) {
-            const int amount=int(height*value);
-            if(amount>0)r->RenderRoundedRectangleFill({219,229,255,225},left,top+height-amount,width,amount,std::min(34,amount/2));
+            const int amount=int(width*value);
+            if(amount>0)r->RenderRoundedRectangleFill({230,238,255,235},left,top,amount,32,std::min(16,amount/2));
+            r->RenderCircleFill({35,43,91,35},left+amount,top+20,25);
+            r->RenderCircleFill({255,255,255,255},left+amount,top+16,22);
         }
-        Glyph(r,name=="Brightness"?"sun":"volume",x+w/2-22,y+h-44,44);
     }
     std::vector<GlassShell::Choice> GlassShell::Choices() {
         std::vector<Choice> c;
@@ -641,16 +654,16 @@ namespace ul::menu::ui {
                {466,880,650,90,"Installed themes","Theme manager",[](){ShowThemesMenu();}},
                {1136,880,690,90,"Recovery","Legacy menu",legacy}};
         } else if(page==Page::Control) {
-            c={{780,255,240,475,"Brightness","",[this](){AdjustSlider(true,brightness>=.95f?.10f:brightness+.10f);}},
-               {1040,255,240,475,"Volume","",[this](){AdjustSlider(false,volume>=.95f?0.f:volume+.10f);}},
-               {100,270,195,190,"Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);}},
-               {320,270,195,190,"Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);}},
-               {540,270,195,190,"Controllers","",[](){ShowController();}},
-               {100,485,195,190,"Power","",[](){ShowPowerDialog();}},
-               {320,485,195,190,"Quiet",g_MenuApplication->IsQuietMode()?"On":"Off",[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());}},
-               {540,485,195,190,"Lock","",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
-               {100,770,635,175,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
-               {1310,630,510,100,"System settings","",[](){ShowSettingsMenu();}}};
+            c={{480,225,790,150,"Brightness","",[this](){AdjustSlider(true,brightness>=.95f?.10f:brightness+.10f);}},
+               {480,405,790,150,"Volume","",[this](){AdjustSlider(false,volume>=.95f?0.f:volume+.10f);}},
+               {70,605,280,190,"Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);}},
+               {370,605,280,190,"Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);}},
+               {670,605,280,190,"Controllers","",[](){ShowController();}},
+               {970,605,280,190,"Power","",[](){ShowPowerDialog();}},
+               {1270,605,280,190,"Quiet",g_MenuApplication->IsQuietMode()?"On":"Off",[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());}},
+               {1570,605,280,190,"Lock","",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
+               {70,835,880,110,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
+               {970,835,880,110,"System settings","",[](){ShowSettingsMenu();}}};
         } else if(page==Page::Notifications) {
             c={{430,905,510,90,"Clear alerts","",[this](){
                    const auto result=g_MenuApplication->DisplayDialog("Clear notifications?","Remove all saved GlassNX alerts.",{"Clear","Cancel"},true);
@@ -666,7 +679,7 @@ namespace ul::menu::ui {
         else count=static_cast<int>(Choices().size());
         if(count==0){focus=0;offset=0;return;}
         focus=std::clamp(focus+amount,0,count-1);
-        const int cap=page==Page::Home?5:12;
+        const int cap=page==Page::Home?5:page==Page::Library?10:12;
         if(focus<offset)offset=(focus/cap)*cap;
         if(focus>=offset+cap)offset=(focus/cap)*cap;
     }
@@ -686,7 +699,7 @@ namespace ul::menu::ui {
             const auto now=std::chrono::steady_clock::now();
             if(now-slider_tick>=std::chrono::milliseconds(85)) {
                 slider_tick=now;
-                const float value=std::clamp(float(679-touch.y)/309.f,0.f,1.f);
+                const float value=std::clamp(float(touch.x-580)/570.f,0.f,1.f);
                 if(std::abs(value-(drag_slider==0?brightness:volume))>.025f)AdjustSlider(drag_slider==0,value);
             }
             return;
@@ -697,8 +710,8 @@ namespace ul::menu::ui {
                 if(touch.HitsRegion(1216,580,530,90)){blur=std::clamp(int((touch.x-1216)*100/530),0,100);materials.clear();SavePreferences();return;}
             }
             if(page==Page::Control) {
-                if(touch.HitsRegion(780,255,240,475)){focus=0;drag_slider=0;slider_tick=std::chrono::steady_clock::now();AdjustSlider(true,float(679-touch.y)/309.f);return;}
-                if(touch.HitsRegion(1040,255,240,475)){focus=1;drag_slider=1;slider_tick=std::chrono::steady_clock::now();AdjustSlider(false,float(679-touch.y)/309.f);return;}
+                if(touch.HitsRegion(480,225,790,150)){focus=0;drag_slider=0;slider_tick=std::chrono::steady_clock::now();AdjustSlider(true,float(touch.x-580)/570.f);return;}
+                if(touch.HitsRegion(480,405,790,150)){focus=1;drag_slider=1;slider_tick=std::chrono::steady_clock::now();AdjustSlider(false,float(touch.x-580)/570.f);return;}
             }
             for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)) {auto action=hit.action;action();return;}
         }
@@ -730,8 +743,8 @@ namespace ul::menu::ui {
         }
         if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft))Move(-1);
         else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight))Move(1);
-        else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp))Move(page==Page::Library||page==Page::Apps?-6:-1);
-        else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))Move(page==Page::Library||page==Page::Apps?6:1);
+        else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp))Move(page==Page::Library?-5:page==Page::Apps?-6:-1);
+        else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))Move(page==Page::Library?5:page==Page::Apps?6:1);
         else if(down&HidNpadButton_A)Activate();
     }
     void GlassShell::HeroShade(int x,int y,int w,int h) {
@@ -757,6 +770,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;UpdateMotion();
+        const auto wallpaper=GetBackgroundTexture();
+        const auto tint=Tints[theme];
+        liquid_glass.Prepare(pu::ui::render::GetMainRenderer(),wallpaper?wallpaper->Get():nullptr,blur,{tint.r,tint.g,tint.b,tint.a});
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
         Picture(r,GetBackgroundTexture(),0,0,1920,1080);
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
@@ -834,7 +850,8 @@ namespace ul::menu::ui {
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close suspended game",1110,606,27,500);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
-            for(int i=0;i<std::min(9,int((list.size()+4)/5));++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960+i*18,938,4);
+            const int dots=std::min(9,int((list.size()+4)/5));
+            for(int i=0;i<dots;++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960-(dots-1)*9+i*18,938,4);
             Card(r,392,954,1136,87);
             Segment(r,404,960,215,74,"bell","Alerts",false,[this](){SetPage(Page::Notifications);});
             const auto alert_count=g_MenuApplication->GetNotificationHistory().size();
@@ -848,7 +865,8 @@ namespace ul::menu::ui {
             Segment(r,1285,960,228,74,"power","Power",false,[](){ShowPowerDialog();});
         } else if(page==Page::Library || page==Page::Apps) {
             const bool games=page==Page::Library;
-            auto list=List();focus=std::clamp(focus,0,std::max(0,static_cast<int>(list.size())-1));offset=(focus/12)*12;
+            const int capacity=games?10:12;
+            auto list=List();focus=std::clamp(focus,0,std::max(0,static_cast<int>(list.size())-1));offset=(focus/capacity)*capacity;
             Label(r,games?"Game Library":"App Library",70,125,64);
             Label(r,games?"Your collection":"Homebrew, media and utilities",72,208,30);
             IconButton(r,1410,145,435,76,"search",search.empty()?"Search":search,false,[this](){Search();});
@@ -856,16 +874,25 @@ namespace ul::menu::ui {
             const char *appTabs[]={"Apps","Homebrew","Tools","Media"};
             for(int i=0;i<4;i++)Button(r,70+i*347,275,330,75,games?gameTabs[i]:appTabs[i],filter==i,[this,i](){filter=i;focus=offset=0;});
             Button(r,1475,275,370,75,sort_name?"A-Z":"Default order",false,[this](){sort_name=!sort_name;focus=offset=0;SavePreferences();});
-            Card(r,70,375,1775,580);
+            if(games) {
+                Card(r,40,375,340,580);
+                const char *icons[]={"games","star","storage","clock"};
+                for(int i=0;i<4;i++)Segment(r,55,400+i*85,310,72,icons[i],gameTabs[i],filter==i,[this,i](){filter=i;focus=offset=0;});
+                Label(r,"Sort collection",75,785,27);
+                Button(r,60,835,300,75,sort_name?"A–Z":"Default order",false,[this](){sort_name=!sort_name;focus=offset=0;SavePreferences();});
+            } else Card(r,70,375,1775,580);
             if(!entries->IsInRoot())Button(r,1050,145,325,76,"Back to folder",false,[this](){Back();});
             if(list.empty()){
                 Label(r,"No matching entries",960,550,45,0,true);
                 Label(r,"Try another category or clear search.",960,625,30,0,true);
                 Button(r,775,700,370,75,"Clear filters",true,[this](){search.clear();filter=0;focus=offset=0;});
             }
-            for(int i=0;i<12&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],88+(i%6)*293,389+(i/6)*280,275,270,focus==offset+i);
+            for(int i=0;i<capacity&&offset+i<static_cast<int>(list.size());++i) {
+                const int columns=games?5:6;
+                Tile(r,list[offset+i],(games?400:88)+(i%columns)*(games?290:293),389+(i/columns)*280,275,270,focus==offset+i);
+            }
             Label(r,games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Options   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
-            if(list.size()>12)Label(r,std::to_string(offset/12+1)+"/"+std::to_string((list.size()+11)/12),1720,1005,30);
+            if(static_cast<int>(list.size())>capacity)Label(r,std::to_string(offset/capacity+1)+"/"+std::to_string((list.size()+capacity-1)/capacity),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
             Label(r,settings?"Settings":control?"Control Center":"Notifications",70,137,64);
@@ -888,15 +915,16 @@ namespace ul::menu::ui {
                     }
                 } else Card(r,450,280,1390,670);
             } else if(control) {
-                Card(r,70,225,695,505);Card(r,1310,255,510,355);
-                r->RenderRoundedRectangleFill({245,245,255,145},890,117,140,9,4);
-                Label(r,"Performance",1340,280,37);
-                Label(r,"Stock clocks",1340,351,37);
-                Label(r,"Profiles unavailable",1340,422,30);
-                Label(r,"No clocks changed",1340,490,27);
-                Card(r,780,770,500,175);Label(r,"Battery",810,790,30);Label(r,Battery(),810,842,64);
-                Card(r,1310,770,510,175);Label(r,"Temperature",1340,790,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",1340,842,45);
-                Label(r,"Fan: unavailable",1340,909,27);
+                Card(r,70,225,380,330);Card(r,1310,225,540,330);
+                Glyph(r,"battery",100,260,42);Label(r,Battery(),165,245,64);
+                Label(r,"Battery",100,335,27);
+                r->RenderRectangleFill({235,242,255,50},100,386,320,2);
+                Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",100,414,45);
+                Label(r,"System temperature",100,485,27);
+                Label(r,"Performance",1340,255,37);
+                Label(r,"Stock clocks",1340,330,45);
+                Label(r,"Profiles unavailable",1340,410,30);
+                Label(r,"No clocks changed",1340,480,27);
             } else {
                 const auto &history=g_MenuApplication->GetNotificationHistory();
                 if(history.empty()) {Card(r,430,270,1060,170);Label(r,"You're all caught up.",960,325,45,0,true);}
@@ -950,9 +978,10 @@ namespace ul::menu::ui {
         }
         if(motion) {
             const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-transition).count();
-            if(elapsed>=0 && elapsed<220) {
-                const float t=1.f-static_cast<float>(elapsed)/220.f;
-                r->RenderRectangleFill({32,31,68,static_cast<u8>(75*t*t)},0,110,1920,970);
+            if(elapsed>=0 && elapsed<260) {
+                const float progress=static_cast<float>(elapsed)/260.f;
+                const float t=1.f-progress*progress*(3.f-2.f*progress);
+                r->RenderRectangleFill({47,42,91,static_cast<u8>(58*t)},0,110,1920,970);
             }
         }
     }
