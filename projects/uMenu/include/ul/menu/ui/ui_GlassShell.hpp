@@ -10,6 +10,16 @@ namespace ul::menu::ui {
         EntryMenu::Ref entries;
         std::function<void(u32)> launch;
         std::function<void()> legacy;
+        std::function<void()> folder_back;
+        std::function<void()> close_suspended;
+        int alert_offset=0, drag_slider=-1;
+        float nav_position=0.f, nav_velocity=0.f, focus_lift=0.f, focus_velocity=0.f;
+        int animated_focus=-1;
+        std::chrono::steady_clock::time_point animation_tick{}, slider_tick{};
+        float StepSpring(float current,float &velocity,float target,float dt);
+        void UpdateMotion();
+        void ScrollAlerts(int amount);
+        void Back();
         Page page = Page::Home;
         Page previous = Page::Home;
         int focus = 0;
@@ -73,14 +83,14 @@ namespace ul::menu::ui {
         void Button(Renderer &r,int x,int y,int w,int h,const std::string &label,bool selected,std::function<void()> cb);
         void ToggleRadio(bool wifi);
     public:
-        GlassShell(EntryMenu::Ref entries, std::function<void(u32)> launch, std::function<void()> legacy);
+        GlassShell(EntryMenu::Ref entries, std::function<void(u32)> launch, std::function<void()> legacy,std::function<void()> back,std::function<void()> close);
         PU_SMART_CTOR(GlassShell)
         s32 GetX() override {return 0;}
         s32 GetY() override {return 0;}
         s32 GetWidth() override {return 1920;}
         s32 GetHeight() override {return 1080;}
         void RecordLaunch(u64 id);
-        void Invalidate() {focus=0;offset=0;texts.clear();hits.clear();banner.reset();banner_checked=false;}
+        void Invalidate() {focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();banner.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}

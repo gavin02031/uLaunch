@@ -60,6 +60,7 @@ namespace ul::menu::ui {
         }
 
         this->entry_menu->MoveTo(new_path);
+        if(this->glass_shell)this->glass_shell->Invalidate();
     }
 
     void MainMenuLayout::menu_EntryInputPressed(const u64 keys_down) {
@@ -776,6 +777,10 @@ namespace ul::menu::ui {
             }
         }, [this]() {
             this->SetGlassMode(false);
+        }, [this]() {
+            if(!this->entry_menu->IsInRoot())this->menu_EntryInputPressed(HidNpadButton_B);
+        }, [this]() {
+            if(g_GlobalSettings.IsSuspended())this->HandleCloseSuspended();
         });
         this->Add(this->glass_shell);
 
@@ -784,7 +789,7 @@ namespace ul::menu::ui {
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
         this->SetGlassMode(true);
-        UL_LOG_INFO("GlassNX v0.6: custom HOME layout created and selected");
+        UL_LOG_INFO("GlassNX v0.7: custom HOME layout created and selected");
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());

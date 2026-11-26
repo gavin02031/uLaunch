@@ -346,6 +346,12 @@ namespace ul::menu::ui {
         }
     }
 
+    void MenuApplication::ClearNotificationHistory() {
+        this->EndOverlay();
+        this->glassnx_notifications.clear();
+        WriteHistory(this->glassnx_notifications);
+    }
+
     void MenuApplication::ShowNotificationHistory() {
         this->EndOverlay();
         // Snapshot because a dialog can process input and service events.

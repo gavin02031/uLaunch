@@ -221,6 +221,7 @@ namespace ul::menu::ui {
 
             void ShowNotification(const std::string &text, const u64 timeout = 3000);
             void ShowNotificationHistory();
+            void ClearNotificationHistory();
             bool IsQuietMode() const {return glassnx_quiet;}
             void SetQuietMode(bool quiet) {glassnx_quiet=quiet;}
             const std::vector<std::string> &GetNotificationHistory() const { return this->glassnx_notifications; }

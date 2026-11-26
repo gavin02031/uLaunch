@@ -41,8 +41,39 @@ namespace ul::menu::ui {
             snprintf(b,sizeof(b),"%02d:%02d",int(t.h),int(t.min)); return b;
         }
     }
-    GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old)
-        :entries(e),launch(l),legacy(old) {LoadPreferences();LoadBackdrop();ReadRecent();}
+    GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old,std::function<void()> back,std::function<void()> close)
+        :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();}
+
+    float GlassShell::StepSpring(float value,float &velocity,float target,float dt) {
+        // Critically damped analytic spring; independent of frame rate.
+        constexpr float omega=19.f;
+        const float change=value-target;
+        const float term=velocity+omega*change;
+        const float decay=expf(-omega*dt);
+        velocity=(velocity-omega*term*dt)*decay;
+        return target+(change+term*dt)*decay;
+    }
+    void GlassShell::UpdateMotion() {
+        const auto now=std::chrono::steady_clock::now();
+        const float dt=animation_tick.time_since_epoch().count()==0?.016f:std::clamp(std::chrono::duration<float>(now-animation_tick).count(),0.f,.05f);
+        animation_tick=now;
+        const int p=static_cast<int>(page);
+        const float target=p<4?float(p):float(std::clamp(static_cast<int>(previous),0,3));
+        if(animated_focus!=focus){animated_focus=focus;focus_lift=0;focus_velocity=0;}
+        if(!motion){nav_position=target;nav_velocity=0;focus_lift=0;focus_velocity=0;return;}
+        nav_position=StepSpring(nav_position,nav_velocity,target,dt);
+        focus_lift=StepSpring(focus_lift,focus_velocity,1.f,dt);
+    }
+    void GlassShell::ScrollAlerts(int amount) {
+        const int n=static_cast<int>(g_MenuApplication->GetNotificationHistory().size());
+        alert_offset=std::clamp(alert_offset+amount,0,std::max(0,n-4));
+    }
+    void GlassShell::Back() {
+        if(page==Page::Control||page==Page::Notifications){SetPage(previous);return;}
+        if(page==Page::Settings&&setting_section!=0){Section(0);return;}
+        if((page==Page::Library||page==Page::Home||page==Page::Apps)&&!entries->IsInRoot()){folder_back();Invalidate();return;}
+        SetPage(Page::Home);
+    }
 
     namespace {
         const char *PrefsPath() {
@@ -161,9 +192,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::SetPage(Page p) {
         if(p==page) return;
-        if(p==Page::Control || p==Page::Notifications) previous=page;
+        if((p==Page::Control || p==Page::Notifications) && static_cast<int>(page)<4) previous=page;
         if(p==Page::Settings)setting_section=0;
-        page=p; focus=0;offset=0;filter=0;search.clear();hits.clear();transition=std::chrono::steady_clock::now();
+        page=p; focus=0;offset=0;filter=0;alert_offset=0;animated_focus=-1;search.clear();hits.clear();transition=std::chrono::steady_clock::now();
     }
     std::vector<u32> GlassShell::List() {
         std::vector<u32> result;
@@ -177,8 +208,7 @@ namespace ul::menu::ui {
             const auto name=Fold(EntryName(e));
             const bool utility=e.Is<EntryType::Application>() &&
                 (name=="sphaira" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
-                 name=="youtube tv" || name=="youtube" || name=="glassnx manager" || name=="um anager" ||
-                 name=="umanager" || name=="hbmenu" || name=="homebrew menu");
+                 name=="youtube tv" || name=="youtube" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
             const bool game=e.Is<EntryType::Application>()&&!utility;
             if(page==Page::Apps) {
                 if((filter==0 && (e.Is<EntryType::Homebrew>()||e.IsSpecial()||utility)) ||
@@ -359,23 +389,31 @@ namespace ul::menu::ui {
         if(SDL_RenderGeometry(pu::ui::render::GetMainRenderer(),t->Get(),vertices,33,inds,96)!=0)Cover(r,t,x,y,w,h);
     }
     void GlassShell::Tile(Renderer &r,u32 index,int x,int y,int w,int h,bool selected) {
-        if(selected)r->RenderRoundedRectangleFill({150,168,229,85},x,y,w,h,32);
+        if(selected)r->RenderRoundedRectangleFill({150,168,229,static_cast<u8>(motion?45+40*focus_lift:85)},x,y,w,h,32);
         auto &e=entries->GetEntries().at(index);
         auto icon=entries->GlassIcon(index,icon_budget);
         if(!icon && e.Is<EntryType::Application>()) icon=GetDefaultApplicationIconTexture();
-        const int side=std::min(w-12,h-45);
-        const int ix=x+(w-side)/2,iy=y+4;
+        const int base_side=std::min(w-20,h-54);
+        const int lift=selected&&motion?int(5*focus_lift):0;
+        const int side=base_side+lift*2;
+        const int ix=x+(w-side)/2,iy=y+5-lift;
         r->RenderRoundedRectangleFill({15,20,45,75},ix,iy+5,side,side,25);
         if(icon)RoundedArt(r,icon,ix,iy,side,side,25);
         else {Card(r,ix,iy,side,side);Glyph(r,e.Is<EntryType::Folder>()?"storage":"apps",x+w/2-34,y+h/2-55,68);}
         if(selected)r->RenderRoundedRectangle({224,236,255,255},ix-3,iy-3,side+6,side+6,27);
         const auto name=EntryName(e);
-        Label(r,name,x+w/2,y+h-32,27,w-10,true);
+        Label(r,name,x+w/2,y+h-35,27,w-10,true);
         if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id)) {
             r->RenderCircleFill({50,49,98,220},x+w-30,y+30,23);
             Label(r,"★",x+w-30,y+11,27,0,true);
         }
-        hits.push_back({x,y,w,h,[this,index](){launch(index);}});
+        hits.push_back({x,y,w,h,[this,index](){
+            const auto list=List();const auto it=std::find(list.begin(),list.end(),index);
+            if(it==list.end())return;
+            const int next=static_cast<int>(it-list.begin());
+            if(next!=focus){focus=next;return;}
+            launch(index);
+        }});
     }
     void GlassShell::ToggleRadio(bool wifi) {
         bool &value=wifi?g_GlobalSettings.wireless_lan_enabled:g_GlobalSettings.bluetooth_enabled;
@@ -492,7 +530,7 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});break;
                     case 7:
-                        row("GlassNX","Version 0.6",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.7",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Recovery","Legacy interface",legacy);break;
                 }
@@ -517,8 +555,11 @@ namespace ul::menu::ui {
                {100,770,635,175,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
                {1310,630,510,100,"System settings","",[](){ShowSettingsMenu();}}};
         } else if(page==Page::Notifications) {
-            c={{430,905,510,90,"View / clear history","",[](){g_MenuApplication->ShowNotificationHistory();}},
-               {980,905,510,90,"Back","",[this](){SetPage(previous);}}};
+            c={{430,905,510,90,"Clear alerts","",[this](){
+                   const auto result=g_MenuApplication->DisplayDialog("Clear notifications?","Remove all saved GlassNX alerts.",{"Clear","Cancel"},true);
+                   if(result==0){g_MenuApplication->ClearNotificationHistory();alert_offset=0;}
+               }},
+               {980,905,510,90,"Back","",[this](){Back();}}};
         }
         return c;
     }
@@ -542,23 +583,36 @@ namespace ul::menu::ui {
         }
     }
     void GlassShell::HandleInput(u64 down,pu::ui::TouchPoint touch) {
-        if(touch.IsEmpty())touched=false;
-        else if(!touched) {
+        if(touch.IsEmpty()) {
+            touched=false;drag_slider=-1;
+        } else if(touched && drag_slider>=0 && page==Page::Control) {
+            const auto now=std::chrono::steady_clock::now();
+            if(now-slider_tick>=std::chrono::milliseconds(85)) {
+                slider_tick=now;
+                const float value=std::clamp(float(679-touch.y)/309.f,0.f,1.f);
+                if(std::abs(value-(drag_slider==0?brightness:volume))>.025f)AdjustSlider(drag_slider==0,value);
+            }
+            return;
+        } else if(!touched) {
             touched=true;
             if(page==Page::Settings && setting_section==0) {
                 if(touch.HitsRegion(1216,480,530,90)){glass=std::clamp(int((touch.x-1216)*100/530),35,85);materials.clear();SavePreferences();return;}
                 if(touch.HitsRegion(1216,580,530,90)){blur=std::clamp(int((touch.x-1216)*100/530),0,100);materials.clear();SavePreferences();return;}
             }
             if(page==Page::Control) {
-                if(touch.HitsRegion(780,255,240,475)){focus=0;AdjustSlider(true,float(679-touch.y)/309.f);return;}
-                if(touch.HitsRegion(1040,255,240,475)){focus=1;AdjustSlider(false,float(679-touch.y)/309.f);return;}
+                if(touch.HitsRegion(780,255,240,475)){focus=0;drag_slider=0;slider_tick=std::chrono::steady_clock::now();AdjustSlider(true,float(679-touch.y)/309.f);return;}
+                if(touch.HitsRegion(1040,255,240,475)){focus=1;drag_slider=1;slider_tick=std::chrono::steady_clock::now();AdjustSlider(false,float(679-touch.y)/309.f);return;}
             }
             for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)) {auto action=hit.action;action();return;}
         }
         if(down&HidNpadButton_Minus){legacy();return;}
-        if(down&(HidNpadButton_ZL|HidNpadButton_ZR)){SetPage(page==Page::Control?Page::Home:Page::Control);return;}
-        if(down&HidNpadButton_Plus){SetPage(page==Page::Notifications?Page::Home:Page::Notifications);return;}
-        if(down&HidNpadButton_B){if(page==Page::Settings&&setting_section!=0)Section(0);else SetPage(Page::Home);return;}
+        if(down&(HidNpadButton_ZL|HidNpadButton_ZR)){if(page==Page::Control)Back();else SetPage(Page::Control);return;}
+        if(down&HidNpadButton_Plus){if(page==Page::Notifications)Back();else SetPage(Page::Notifications);return;}
+        if(down&HidNpadButton_B){Back();return;}
+        if(page==Page::Notifications) {
+            if(down&(HidNpadButton_Up|HidNpadButton_StickLUp)){ScrollAlerts(-1);return;}
+            if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){ScrollAlerts(1);return;}
+        }
         if(down&HidNpadButton_L){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+3)%4));return;}
         if(down&HidNpadButton_R){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+1)%4));return;}
         if(down&HidNpadButton_Y){
@@ -566,6 +620,7 @@ namespace ul::menu::ui {
             if(page==Page::Library || page==Page::Apps){filter=(filter+1)%4;focus=0;offset=0;}return;
         }
         if(down&HidNpadButton_X) {
+            if(page==Page::Home && g_GlobalSettings.IsSuspended()){close_suspended();return;}
             if(page==Page::Library||page==Page::Apps){Search();return;}
         }
         if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){ToggleFavorite();return;}
@@ -582,7 +637,7 @@ namespace ul::menu::ui {
         else if(down&HidNpadButton_A)Activate();
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
-        hits.clear();icon_budget=true;
+        hits.clear();icon_budget=true;UpdateMotion();
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
         Picture(r,GetBackgroundTexture(),0,0,1920,1080);
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
@@ -591,7 +646,10 @@ namespace ul::menu::ui {
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
         const char *navicons[]={"home","games","apps","settings"};
-        for(int i=0;i<4;++i)Segment(r,565+i*198,32,190,64,navicons[i],tabs[i],static_cast<int>(page)==i,[this,i](){SetPage(static_cast<Page>(i));});
+        const int pill=565+int(nav_position*198);
+        r->RenderRoundedRectangleFill({171,185,241,112},pill,32,190,64,32);
+        r->RenderRoundedRectangle({218,229,255,115},pill,32,190,64,32);
+        for(int i=0;i<4;++i)Segment(r,565+i*198,32,190,64,navicons[i],tabs[i],false,[this,i](){SetPage(static_cast<Page>(i));});
         Label(r,Clock(),1480,43,30);
         if(g_GlobalSettings.wireless_lan_enabled)Glyph(r,"wifi",1600,40,34);
         else Label(r,"Offline",1580,43,27);
@@ -625,15 +683,18 @@ namespace ul::menu::ui {
                 }
                 Label(r,suspended?"CONTINUE PLAYING":"FEATURED GAME",112,185,30);
                 Label(r,EntryName(e),112,260,64,680);
-                Label(r,suspended?"Currently suspended":"Ready to open",112,362,30,680);
+                Label(r,suspended?"Currently suspended":"Ready to play",112,362,30,680);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",false,[this,idx](){launch(idx);});
-                if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id))Label(r,"Favorite",405,466,27);
+                if(suspended)Button(r,385,445,220,78,"Close game",false,close_suspended);
+                else if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id))Label(r,"Favorite",405,466,27);
             } else {
                 Label(r,"Your home awaits",112,245,64);
                 Label(r,"Add or organize entries in the legacy menu.",112,355,30);
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
+            Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
+            if(g_GlobalSettings.IsSuspended())Label(r,"X  Close suspended game",1110,606,27,500);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
             for(int i=0;i<std::min(9,int((list.size()+4)/5));++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960+i*18,938,4);
             Card(r,392,954,1136,87);
@@ -653,7 +714,12 @@ namespace ul::menu::ui {
             for(int i=0;i<4;i++)Button(r,70+i*347,275,330,75,games?gameTabs[i]:appTabs[i],filter==i,[this,i](){filter=i;focus=offset=0;});
             Button(r,1475,275,370,75,sort_name?"A-Z":"Default order",false,[this](){sort_name=!sort_name;focus=offset=0;SavePreferences();});
             Card(r,70,375,1775,580);
-            if(list.empty())Label(r,"No matching entries",960,585,45,0,true);
+            if(!entries->IsInRoot())Button(r,1050,145,325,76,"Back to folder",false,[this](){Back();});
+            if(list.empty()){
+                Label(r,"No matching entries",960,550,45,0,true);
+                Label(r,"Try another category or clear search.",960,625,30,0,true);
+                Button(r,775,700,370,75,"Clear filters",true,[this](){search.clear();filter=0;focus=offset=0;});
+            }
             for(int i=0;i<12&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],88+(i%6)*293,389+(i/6)*280,275,270,focus==offset+i);
             Label(r,games?"L/R Pages   Y Filter   X Search   L Stick Favorite   A Open":"L/R Pages   Y Filter   X Search   A Open",70,1005,27,1580);
             if(list.size()>12)Label(r,std::to_string(offset/12+1)+"/"+std::to_string((list.size()+11)/12),1720,1005,30);
@@ -691,9 +757,17 @@ namespace ul::menu::ui {
             } else {
                 const auto &history=g_MenuApplication->GetNotificationHistory();
                 if(history.empty()) {Card(r,430,270,1060,170);Label(r,"You're all caught up.",960,325,45,0,true);}
-                for(size_t i=0;i<std::min<size_t>(history.size(),4);++i) {
-                    int y=245+static_cast<int>(i)*155;Card(r,430,y,1060,130);
-                    Label(r,"GlassNX",465,y+12,27);Label(r,history[history.size()-1-i],465,y+53,37,970);
+                const int total=static_cast<int>(history.size());
+                alert_offset=std::clamp(alert_offset,0,std::max(0,total-4));
+                for(int i=0;i<4&&alert_offset+i<total;++i) {
+                    int y=245+i*155;Card(r,430,y,1060,130);
+                    Glyph(r,"bell",460,y+30,48);
+                    Label(r,"GlassNX",525,y+12,27);Label(r,history[total-1-alert_offset-i],525,y+53,37,920);
+                }
+                if(total>0)Label(r,std::to_string(alert_offset+1)+"–"+std::to_string(std::min(alert_offset+4,total))+" of "+std::to_string(total)+" alerts",960,860,27,0,true);
+                if(total>4) {
+                    Button(r,1520,245,290,75,"Newer",false,[this](){ScrollAlerts(-4);});
+                    Button(r,1520,335,290,75,"Older",false,[this](){ScrollAlerts(4);});
                 }
             }
             auto choices=Choices();focus=std::clamp(focus,0,std::max(0,static_cast<int>(choices.size())-1));
