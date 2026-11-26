@@ -132,7 +132,7 @@
     "lockscreen_menu": {
         "info_text": {
             "h_align": "center",
-            "y": 825,
+            "y": 837,
             "font_size": "medium"
         },
         "connection_top_icon": {

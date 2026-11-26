@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <cctype>
+#include <SDL2/SDL_image.h>
 #include <switch/runtime/devices/fs_dev.h>
 
 extern ul::menu::ui::GlobalSettings g_GlobalSettings;
@@ -20,7 +22,17 @@ namespace ul::menu::ui {
                 if(e.control.name.empty()) e.TryLoadNacp();
                 return e.control.name.empty() ? (e.Is<EntryType::Homebrew>() ? "Homebrew" : "Game") : e.control.name;
             }
-            return "System shortcut";
+            switch(e.type) {
+                case EntryType::SpecialEntryMiiEdit:return "Mii Editor";
+                case EntryType::SpecialEntryWebBrowser:return "Web Browser";
+                case EntryType::SpecialEntryUserPage:return "Profile";
+                case EntryType::SpecialEntrySettings:return "System Settings";
+                case EntryType::SpecialEntryThemes:return "Themes";
+                case EntryType::SpecialEntryControllers:return "Controllers";
+                case EntryType::SpecialEntryAlbum:return "Album";
+                case EntryType::SpecialEntryAmiibo:return "amiibo";
+                default:return "System shortcut";
+            }
         }
         std::string Battery() {return std::to_string(os::GetBatteryLevel())+"%";}
         std::string Clock() {
@@ -29,24 +41,116 @@ namespace ul::menu::ui {
         }
     }
     GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old)
-        :entries(e),launch(l),legacy(old) {}
+        :entries(e),launch(l),legacy(old) {LoadPreferences();LoadBackdrop();}
+
+    namespace {
+        const char *PrefsPath() {
+            return g_GlobalSettings.ams_is_emummc?"sdmc:/ulaunch/glassnx-emu.prefs":"sdmc:/ulaunch/glassnx-sys.prefs";
+        }
+        std::string Fold(std::string v) {
+            for(auto &c:v)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return v;
+        }
+    }
+    void GlassShell::LoadPreferences() {
+        auto fp=fopen(PrefsPath(),"rb");if(!fp)return;
+        int version=0,t=0,g=65,b=65,m=1,sort=0;unsigned count=0;
+        if(fscanf(fp,"GlassNX %d %d %d %d %d %d %u",&version,&t,&g,&b,&m,&sort,&count)==7 && version==1 && count<=512) {
+            theme=std::clamp(t,0,3);glass=std::clamp(g,35,85);blur=std::clamp(b,0,100);motion=m!=0;sort_name=sort!=0;
+            for(unsigned i=0;i<count;i++){unsigned long long id=0;if(fscanf(fp,"%llx",&id)!=1)break;if(id)favorites.push_back(static_cast<u64>(id));}
+        }
+        fclose(fp);
+    }
+    void GlassShell::SavePreferences() {
+        const std::string temp=std::string(PrefsPath())+".tmp";
+        auto fp=fopen(temp.c_str(),"wb");if(!fp){g_MenuApplication->ShowNotification("Could not save appearance settings");return;}
+        bool ok=fprintf(fp,"GlassNX 1 %d %d %d %d %d %u\n",theme,glass,blur,int(motion),int(sort_name),static_cast<unsigned>(favorites.size()))>0;
+        for(auto id:favorites)if(fprintf(fp,"%016llx\n",static_cast<unsigned long long>(id))<0)ok=false;
+        if(fclose(fp)!=0)ok=false;
+        if(ok && rename(temp.c_str(),PrefsPath())==0)return;
+        remove(temp.c_str());g_MenuApplication->ShowNotification("Could not save appearance settings");
+    }
+    void GlassShell::SetTheme(int index) {
+        theme=std::clamp(index,0,3);materials.clear();SavePreferences();
+        transition=std::chrono::steady_clock::now();
+    }
+    bool GlassShell::Favorite(u64 id) const {return std::find(favorites.begin(),favorites.end(),id)!=favorites.end();}
+    void GlassShell::ToggleFavorite() {
+        auto list=List();if(focus<0||focus>=static_cast<int>(list.size()))return;
+        const auto &e=entries->GetEntries()[list[focus]];if(!e.Is<EntryType::Application>())return;
+        auto it=std::find(favorites.begin(),favorites.end(),e.app_info.app_id);
+        if(it!=favorites.end()){favorites.erase(it);g_MenuApplication->ShowNotification("Removed from favorites");}
+        else if(favorites.size()<512){favorites.push_back(e.app_info.app_id);g_MenuApplication->ShowNotification("Added to favorites");}
+        SavePreferences();
+    }
+    void GlassShell::Search() {
+        SwkbdConfig cfg;if(R_FAILED(swkbdCreate(&cfg,0)))return;
+        swkbdConfigMakePresetDefault(&cfg);
+        swkbdConfigSetType(&cfg,SwkbdType_All);
+        swkbdConfigSetGuideText(&cfg,"Search your library");
+        swkbdConfigSetInitialText(&cfg,search);
+        char result[128]={};auto rc=ShowSwkbd(&cfg,result,sizeof(result));swkbdClose(&cfg);
+        if(R_SUCCEEDED(rc)){search=result;focus=offset=0;}
+    }
+    void GlassShell::LoadBackdrop() {
+        const auto path=TryFindImage("ui/Background");if(path.empty())return;
+        auto src=IMG_Load(path.c_str());if(!src)return;
+        auto small=SDL_CreateRGBSurfaceWithFormat(0,240,135,32,SDL_PIXELFORMAT_RGBA32);
+        if(small && SDL_BlitScaled(src,nullptr,small,nullptr)==0 && SDL_LockSurface(small)==0) {
+            backdrop.resize(240*135*4);
+            for(int y=0;y<135;y++)std::copy_n(static_cast<const u8*>(small->pixels)+y*small->pitch,240*4,backdrop.data()+y*240*4);
+            SDL_UnlockSurface(small);
+        }
+        if(small)SDL_FreeSurface(small);
+        SDL_FreeSurface(src);
+    }
+    pu::sdl2::TextureHandle::Ref GlassShell::Banner(u64 id) {
+        if(banner_checked && banner_id==id)return banner;
+        banner_checked=true;banner_id=id;banner.reset();
+        char name[120]={};
+        snprintf(name,sizeof(name),"sdmc:/ulaunch/glassnx/art/%016llx.jpg",static_cast<unsigned long long>(id));
+        auto fp=fopen(name,"rb");if(!fp)return {};
+        const bool seek_ok=fseek(fp,0,SEEK_END)==0;
+        const long length=seek_ok?ftell(fp):-1;fclose(fp);
+        if(length<=0||length>8*1024*1024)return {};
+        auto tex=pu::ui::render::LoadImageFromFile(name);
+        if(tex)banner=pu::sdl2::TextureHandle::New(tex);
+        return banner;
+    }
+    void GlassShell::Cover(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h) {
+        if(!t||!t->Get())return;
+        int tw=0,th=0;if(SDL_QueryTexture(t->Get(),nullptr,nullptr,&tw,&th)!=0||tw<=0||th<=0)return;
+        SDL_Rect source{0,0,tw,th};
+        if(static_cast<long long>(tw)*h>static_cast<long long>(th)*w){source.w=th*w/h;source.x=(tw-source.w)/2;}
+        else {source.h=tw*h/w;source.y=(th-source.h)/2;}
+        // Use SDL's crop directly to preserve artwork aspect ratio.
+        SDL_Rect dest{x,y,w,h};
+        SDL_RenderCopy(pu::ui::render::GetMainRenderer(),t->Get(),&source,&dest);
+        (void)r;
+    }
 
     void GlassShell::SetPage(Page p) {
         if(p==page) return;
         if(p==Page::Control || p==Page::Notifications) previous=page;
-        page=p; focus=0;offset=0;filter=0;
+        page=p; focus=0;offset=0;filter=0;search.clear();hits.clear();transition=std::chrono::steady_clock::now();
     }
-    std::vector<u32> GlassShell::List() const {
+    std::vector<u32> GlassShell::List() {
         std::vector<u32> result;
-        const auto &all=entries->GetEntries();
+        auto &all=entries->GetEntries();
         for(u32 i=0;i<all.size();++i) {
-            const auto &e=all[i];
+            auto &e=all[i];
+            if(e.Is<EntryType::Invalid>())continue;
+            if(!search.empty() && Fold(EntryName(e)).find(Fold(search))==std::string::npos)continue;
             if(page==Page::Apps) {
                 if(e.Is<EntryType::Homebrew>() || (filter==0 && e.IsSpecial())) result.push_back(i);
             } else if(page==Page::Library) {
-                if((filter!=1 && e.Is<EntryType::Application>()) || (filter!=2 && e.Is<EntryType::Folder>())) result.push_back(i);
+                if((filter==0 && (e.Is<EntryType::Application>()||e.Is<EntryType::Folder>())) ||
+                    (filter==1 && e.Is<EntryType::Application>() && Favorite(e.app_info.app_id)) ||
+                    (filter==2 && e.Is<EntryType::Folder>()) ||
+                    (filter==3 && e.Is<EntryType::Application>()))result.push_back(i);
             } else if(e.Is<EntryType::Application>() || e.Is<EntryType::Homebrew>()) result.push_back(i);
         }
+        if(sort_name && page!=Page::Home)std::stable_sort(result.begin(),result.end(),[&](u32 a,u32 b){return Fold(EntryName(all[a]))<Fold(EntryName(all[b]));});
         if(page==Page::Home) {
             const auto it=std::find_if(result.begin(),result.end(),[&](u32 i){return g_GlobalSettings.IsEntrySuspended(all[i]);});
             if(it!=result.end()) std::rotate(result.begin(),it,it+1);
@@ -56,13 +160,13 @@ namespace ul::menu::ui {
     void GlassShell::Picture(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h) {
         if(t && t->Get()) r->RenderTexture(t->Get(),x,y,pu::ui::render::TextureRenderOptions({},w,h,{},{},{}));
     }
-    pu::sdl2::TextureHandle::Ref GlassShell::Material(int w,int h,bool selected) {
-        const auto key=std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(selected);
+    pu::sdl2::TextureHandle::Ref GlassShell::Material(int x,int y,int w,int h,bool selected) {
+        const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected);
         auto it=materials.find(key);if(it!=materials.end())return it->second;
         // Cache at half logical resolution; the GPU composites the translucent
         // textured bevel. No per-frame rasterization or framebuffer readback.
-        const int tw=(w+1)/2,th=(h+1)/2;
-        const float radius=std::min(17.f,th/3.f);
+        const int tw=(w+2)/3,th=(h+2)/3;
+        const float radius=std::min(11.f,th/3.f);
         const auto tint=GlassColors[theme];
         std::vector<u8> rgba(static_cast<size_t>(tw)*th*4);
         auto byte=[](float v){return static_cast<u8>(std::clamp(v,0.f,255.f));};
@@ -77,21 +181,39 @@ namespace ul::menu::ui {
             const float light=std::max(0.f,1.f-std::abs(d+5.f)/7.f);
             const float shine=(1.f-v)*.12f+rim*(selected?.8f:.58f)+light*.15f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
-            rgba[p]=byte(tint.r+(255-tint.r)*shine);
-            rgba[p+1]=byte(tint.g+(255-tint.g)*shine);
-            rgba[p+2]=byte(tint.b+(255-tint.b)*shine);
-            rgba[p+3]=byte(cover*((100-glass)*1.65f+42+22*(1-v)+rim*(selected?185:130)+light*32));
+            // Sample the real wallpaper with a low-frequency blur and edge
+            // displacement. Cached per panel position, never reads the GPU framebuffer.
+            const float edge=std::max(0.f,1.f-std::abs(d)/6.f);
+            const int sx=std::clamp(int((x+px*3+(px-tw*.5f)*edge*.11f)/8.f),0,239);
+            const int sy=std::clamp(int((y+py*3+(py-th*.5f)*edge*.11f)/8.f),0,134);
+            const int radius_sample=blur/15;
+            for(int k=0;k<3;k++) {
+                const float tc=k==0?tint.r:k==1?tint.g:tint.b;
+                float bg=tc;
+                if(!backdrop.empty()) {
+                    unsigned sum=0;
+                    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+                        sum+=backdrop[(std::clamp(sy+dy*radius_sample,0,134)*240+std::clamp(sx+dx*radius_sample,0,239))*4+k];
+                    bg=sum/9.f;
+                    const auto shade=Tints[theme];
+                    const float sc=k==0?shade.r:k==1?shade.g:shade.b;
+                    bg=bg*(1-shade.a/255.f)+sc*(shade.a/255.f);
+                }
+                const float colored=bg*.68f+tc*.32f;
+                rgba[p+k]=byte(colored+(255-colored)*shine);
+            }
+            rgba[p+3]=byte(cover*((100-glass)*1.65f+90+22*(1-v)+rim*(selected?185:130)+light*32));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
         if(!tex)return {};
         if(SDL_UpdateTexture(tex,nullptr,rgba.data(),tw*4)!=0 || SDL_SetTextureBlendMode(tex,SDL_BLENDMODE_BLEND)!=0) {SDL_DestroyTexture(tex);return {};}
-        if(materials.size()>=48)materials.clear();
+        if(materials.size()>=96)materials.clear();
         auto handle=pu::sdl2::TextureHandle::New(tex);materials.emplace(key,handle);return handle;
     }
     void GlassShell::Card(Renderer &r,int x,int y,int w,int h,bool selected) {
         const int radius=std::min(34,h/3);
         r->RenderRoundedRectangleFill({23,26,65,55},x+2,y+6,w,h,radius);
-        const auto tex=Material(w,h,selected);
+        const auto tex=Material(x,y,w,h,selected);
         if(tex)Picture(r,tex,x,y,w,h);
         else {
             const auto c=GlassColors[theme];
@@ -131,6 +253,10 @@ namespace ul::menu::ui {
         Picture(r,icon,x+(w-side)/2,y+12,side,side);
         const auto name=EntryName(e);
         Label(r,name,x+w/2,y+h-40,27,w-24,true);
+        if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id)) {
+            r->RenderCircleFill({50,49,98,220},x+w-30,y+30,23);
+            Label(r,"★",x+w-30,y+11,27,0,true);
+        }
         hits.push_back({x,y,w,h,[this,index](){launch(index);}});
     }
     void GlassShell::ToggleRadio(bool wifi) {
@@ -199,12 +325,13 @@ namespace ul::menu::ui {
     std::vector<GlassShell::Choice> GlassShell::Choices() {
         std::vector<Choice> c;
         if(page==Page::Settings) {
-            c={{466,210,1360,105,"Theme",Themes[theme],[this](){theme=(theme+1)%4;}},
-               {466,335,1360,105,"Glass transparency",std::to_string(glass)+"%",[this](){glass=glass>=85?35:glass+10;}},
-               {466,460,1360,105,"Lock screen","Open lock screen",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
-               {466,585,1360,105,"System settings","Network, controllers, console",[](){ShowSettingsMenu();}},
-               {466,710,1360,105,"Installed themes","Open theme manager",[](){ShowThemesMenu();}},
-               {466,835,1360,105,"Recovery / legacy menu","Return to uLaunch interface",legacy}};
+            c={{466,480,1360,90,"Glass transparency",std::to_string(glass)+"%",[this](){glass=glass>=85?35:glass+10;materials.clear();SavePreferences();}},
+               {466,580,1360,90,"Blur strength",std::to_string(blur)+"%",[this](){blur=blur>=100?0:std::min(100,blur+20);materials.clear();SavePreferences();}},
+               {466,680,1360,90,"UI Motion",motion?"On":"Off",[this](){motion=!motion;SavePreferences();}},
+               {466,780,650,90,"Lock screen","Open now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
+               {1136,780,690,90,"System settings","Native controls",[](){ShowSettingsMenu();}},
+               {466,880,650,90,"Installed themes","Theme manager",[](){ShowThemesMenu();}},
+               {1136,880,690,90,"Recovery","Legacy menu",legacy}};
         } else if(page==Page::Control) {
             c={{70,420,875,155,"Brightness","",[this](){AdjustSlider(true,brightness+.10f);}},
                {975,420,875,155,"Volume","",[this](){AdjustSlider(false,volume+.10f);}},
@@ -257,8 +384,13 @@ namespace ul::menu::ui {
         if(down&HidNpadButton_L){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+3)%4));return;}
         if(down&HidNpadButton_R){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+1)%4));return;}
         if(down&HidNpadButton_Y){
-            if(page==Page::Library || page==Page::Apps){filter=(filter+1)%(page==Page::Library?3:2);focus=0;offset=0;}return;
+            if(page==Page::Library || page==Page::Apps){filter=(filter+1)%(page==Page::Library?4:2);focus=0;offset=0;}return;
         }
+        if(down&HidNpadButton_X) {
+            if(page==Page::Library||page==Page::Apps){Search();return;}
+        }
+        if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){ToggleFavorite();return;}
+        if(page==Page::Settings && (down&HidNpadButton_X)){SetTheme((theme+1)%4);return;}
         if(page==Page::Control && focus<2 && (down&(HidNpadButton_Left|HidNpadButton_Right|HidNpadButton_StickLLeft|HidNpadButton_StickLRight))) {
             const float delta=(down&(HidNpadButton_Right|HidNpadButton_StickLRight))?.05f:-.05f;
             AdjustSlider(focus==0,(focus==0?brightness:volume)+delta);
@@ -301,12 +433,17 @@ namespace ul::menu::ui {
             if(!list.empty()) {
                 const auto idx=list[focus];auto &e=entries->GetEntries()[idx];
                 const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
+                auto wide=e.Is<EntryType::Application>()?Banner(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
+                if(wide) {
+                    Cover(r,wide,85,155,1130,405);
+                    for(int i=0;i<24;i++)r->RenderRectangleFill({24,25,59,static_cast<u8>(185-i*7)},85+i*32,155,32,405);
+                }
                 Label(r,suspended?"CONTINUE PLAYING":"SELECTED GAME / APP",112,185,30);
                 Label(r,EntryName(e),112,260,64,680);
                 Label(r,suspended?"Currently suspended":"Ready to open",112,362,30,680);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",false,[this,idx](){launch(idx);});
                 auto icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
-                Picture(r,icon,845,175,360,360);
+                if(!wide)Picture(r,icon,845,175,360,360);
             } else {
                 Label(r,"Your home awaits",112,245,64);
                 Label(r,"Add or organize entries in the legacy menu.",112,355,30);
@@ -328,23 +465,40 @@ namespace ul::menu::ui {
             Card(r,70,305,320,630);
             Label(r,games?"Collections":"Categories",94,330,37);
             Button(r,92,405,275,80,"All",filter==0,[this](){filter=0;focus=offset=0;});
-            Button(r,92,505,275,80,games?"Folders":"Homebrew",filter==1,[this](){filter=1;focus=offset=0;});
-            if(games)Button(r,92,605,275,80,"Games",filter==2,[this](){filter=2;focus=offset=0;});
-            Button(r,92,815,275,80,"Manage entries",false,legacy);
+            Button(r,92,505,275,80,games?"Favorites":"Homebrew",filter==1,[this](){filter=1;focus=offset=0;});
+            if(games) {
+                Button(r,92,605,275,80,"Folders",filter==2,[this](){filter=2;focus=offset=0;});
+                Button(r,92,705,275,80,"Games",filter==3,[this](){filter=3;focus=offset=0;});
+            }
+            Button(r,92,815,275,80,sort_name?"Sort: A-Z":"Sort: Default",false,[this](){sort_name=!sort_name;focus=offset=0;SavePreferences();});
+            Button(r,1280,155,565,72,search.empty()?"Search ...":search,false,[this](){Search();});
             Label(r,std::to_string(list.size())+" entries in this folder",430,287,30);
             if(list.empty())Label(r,"Nothing here yet. Use Manage entries.",430,445,37);
             for(int i=0;i<10&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],430+(i%5)*286,350+(i/5)*288,265,268,focus==offset+i);
-            Label(r,"L/R  Pages     Y  Filter     A  Open     -  Legacy menu",70,1005,30);
+            Label(r,"L/R Pages    Y Filter    X Search    L Stick Favorite    A Open    - Legacy",70,1005,27,1540);
             if(list.size()>10)Label(r,std::to_string(offset/10+1)+"/"+std::to_string((list.size()+9)/10),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
             Label(r,settings?"Settings":control?"Control Center":"Notifications",70,137,64);
             if(settings) {
-                Card(r,70,210,360,730);
-                Label(r,"Appearance",95,242,37);
-                for(int i=0;i<4;++i)Button(r,94,315+i*105,308,80,Themes[i],theme==i,[this,i](){theme=i;});
-                Label(r,"Session settings",95,815,27);
-                Label(r,"Saved settings: legacy",95,855,27);
+                Card(r,70,210,360,760);
+                Button(r,90,240,320,85,"Appearance",true,[](){});
+                Button(r,90,340,320,85,"System",false,[](){ShowSettingsMenu();});
+                Button(r,90,440,320,85,"Themes",false,[](){ShowThemesMenu();});
+                Button(r,90,540,320,85,"Controls",false,[](){ShowController();});
+                Button(r,90,640,320,85,"Power",false,[](){ShowPowerDialog();});
+                Button(r,90,740,320,85,"About",false,[](){ShowAboutDialog();});
+                Label(r,"X  Change theme",95,895,27);
+                Label(r,"Appearance",466,205,45);
+                Label(r,"Theme",466,265,30);
+                for(int i=0;i<4;i++) {
+                    const int x=466+i*344;
+                    Card(r,x,315,320,125,theme==i);
+                    Picture(r,GetBackgroundTexture(),x+6,321,308,113);
+                    if(Tints[i].a)r->RenderRectangleFill(Tints[i],x+6,321,308,113);
+                    Label(r,Themes[i],x+160,443,27,305,true);
+                    hits.push_back({x,315,320,125,[this,i](){SetTheme(i);}});
+                }
             } else if(control) {
                 Card(r,70,240,560,165);Label(r,"BATTERY",103,260,30);Label(r,Battery(),103,310,64);
                 Card(r,650,240,560,165);Label(r,"SOC TEMPERATURE",683,260,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",683,310,64);
@@ -363,10 +517,24 @@ namespace ul::menu::ui {
                 if(control && i<2) {Slider(r,c.x,c.y,c.w,c.h,c.label,i==0?brightness:volume,focus==static_cast<int>(i));continue;}
                 Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
                 Label(r,c.label,c.x+25,c.y+15,37,c.w-50);
-                Label(r,c.detail,c.x+25,c.y+65,27,c.w-50);
+                Label(r,c.detail,c.x+25,c.y+(settings?55:65),27,c.w-50);
+                if(settings && i<2) {
+                    const int x=c.x+750,y=c.y+42,w=530;
+                    const float value=(i==0?glass:blur)/100.f;
+                    r->RenderRoundedRectangleFill({30,38,75,110},x,y,w,12,6);
+                    if(value>0)r->RenderRoundedRectangleFill({236,238,255,240},x,y,int(w*value),12,6);
+                    r->RenderCircleFill({255,255,255,255},x+int(w*value),y+6,17);
+                }
                 hits.push_back({c.x,c.y,c.w,c.h,c.action});
             }
             Label(r,"A  Select     B  Home     ZL/ZR  Control     +  Notifications",70,1005,30);
+        }
+        if(motion) {
+            const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-transition).count();
+            if(elapsed>=0 && elapsed<220) {
+                const float t=1.f-static_cast<float>(elapsed)/220.f;
+                r->RenderRectangleFill({32,31,68,static_cast<u8>(75*t*t)},0,110,1920,970);
+            }
         }
     }
 }

@@ -20,7 +20,19 @@ namespace ul::menu::ui {
     }
 
     LockscreenMenuLayout::LockscreenMenuLayout() : IMenuLayout() {
-        this->info_text = pu::ui::elm::TextBlock::New(0, 0, GetLanguageString("lockscreen_info"));
+        auto custom=pu::ui::render::LoadImageFromFile("sdmc:/ulaunch/glassnx/lockscreen.jpg");
+        if(custom) this->SetBackgroundImage(pu::sdl2::TextureHandle::New(custom));
+        else {
+            auto scene=TryFindLoadImage("ui/GlassNX/Lockscreen");
+            if(scene)this->SetBackgroundImage(pu::sdl2::TextureHandle::New(scene));
+        }
+        auto unlock_glass=TryFindLoadImage("ui/GlassNX/Unlock");
+        if(unlock_glass)this->Add(pu::ui::elm::Image::New(640,790,pu::sdl2::TextureHandle::New(unlock_glass)));
+        auto brand=pu::ui::elm::TextBlock::New(0,125,"GlassNX");
+        brand->SetColor({255,255,255,255});
+        brand->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
+        this->Add(brand);
+        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "Press A to unlock");
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("lockscreen_menu", "info_text", this->info_text);
         this->Add(this->info_text);

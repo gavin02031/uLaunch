@@ -1,10 +1,35 @@
 #include <ul/menu/ui/ui_MenuApplication.hpp>
+#include <cstdio>
 #include <ul/menu/smi/smi_Commands.hpp>
 
 extern ul::menu::ui::GlobalSettings g_GlobalSettings;
 extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 
 namespace ul::menu::ui {
+    namespace {
+        const char *HistoryPath() {
+            return g_GlobalSettings.ams_is_emummc?"sdmc:/ulaunch/glassnx-emu.alerts":"sdmc:/ulaunch/glassnx-sys.alerts";
+        }
+        void ReadHistory(std::vector<std::string> &out) {
+            auto fp=fopen(HistoryPath(),"rb");if(!fp)return;
+            unsigned count=0;
+            if(fread(&count,sizeof(count),1,fp)==1 && count<=24)for(unsigned i=0;i<count;i++){
+                unsigned len=0;if(fread(&len,sizeof(len),1,fp)!=1||len==0||len>2048)break;
+                std::string item(len,'\0');if(fread(item.data(),1,len,fp)!=len)break;
+                out.push_back(item);
+            }
+            fclose(fp);
+        }
+        void WriteHistory(const std::vector<std::string> &history) {
+            const std::string temp=std::string(HistoryPath())+".tmp";
+            auto fp=fopen(temp.c_str(),"wb");if(!fp)return;
+            unsigned count=static_cast<unsigned>(history.size());bool ok=fwrite(&count,sizeof(count),1,fp)==1;
+            for(const auto &item:history){unsigned len=static_cast<unsigned>(item.size());if(fwrite(&len,sizeof(len),1,fp)!=1||fwrite(item.data(),1,len,fp)!=len)ok=false;}
+            if(fclose(fp)!=0)ok=false;
+            if(ok && rename(temp.c_str(),HistoryPath())==0)return;
+            remove(temp.c_str());
+        }
+    }
 
     namespace {
 
@@ -92,6 +117,7 @@ namespace ul::menu::ui {
 
         #define _LOG_SOFAR(kind) UL_LOG_INFO("MenuApplication::OnLoad -> " kind ", so far took %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
 
+        ReadHistory(this->glassnx_notifications);
         this->launch_failed = false;
         this->pending_gc_mount_rc = ResultSuccess;
         this->needs_app_records_reload = false;
@@ -159,6 +185,7 @@ namespace ul::menu::ui {
         auto notif_toast_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         notif_toast_text->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
         notif_toast_text->SetColor(toast_text_clr);
+        notif_toast_text->SetClampWidth(760);
         this->notif_toast = pu::ui::extras::Toast::New(notif_toast_text, toast_base_clr);
 
         this->text_clr = GetRequiredUiValue<pu::ui::Color>("text_color");
@@ -298,10 +325,13 @@ namespace ul::menu::ui {
             if(this->glassnx_notifications.size() >= 24) {
                 this->glassnx_notifications.erase(this->glassnx_notifications.begin());
             }
-            this->glassnx_notifications.push_back(text);
+            this->glassnx_notifications.push_back(text.substr(0,2048));
+            WriteHistory(this->glassnx_notifications);
         }
         this->EndOverlay();
         this->notif_toast->SetText(text);
+        this->notif_toast->SetX(1920-this->notif_toast->GetWidth()-46);
+        this->notif_toast->SetY(118);
         this->StartOverlayWithTimeout(this->notif_toast, timeout);
     }
 
@@ -331,6 +361,7 @@ namespace ul::menu::ui {
             else if(option == 1 && index + 1 < history.size()) ++index;
             else if(option == 2) {
                 this->glassnx_notifications.clear();
+                WriteHistory(this->glassnx_notifications);
                 return;
             }
             else if(option != 0 && option != 1) return;

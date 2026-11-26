@@ -12,11 +12,15 @@ def chunk(kind, data):
 def clamp(v):
     return min(255, max(0, int(v)))
 
-def png(path, pixel):
-    original = path.read_bytes()
-    if original[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError(f"not PNG: {path}")
-    w, h = struct.unpack(">II", original[16:24])
+def png(path, pixel, size=None):
+    if size is None:
+        original = path.read_bytes()
+        if original[:8] != b"\x89PNG\r\n\x1a\n":
+            raise ValueError(f"not PNG: {path}")
+        w, h = struct.unpack(">II", original[16:24])
+    else:
+        w, h = size
+        path.parent.mkdir(parents=True, exist_ok=True)
     if not (0 < w <= 4096 and 0 < h <= 2160):
         raise ValueError(f"unexpected dimensions: {path}: {w}x{h}")
     raw = bytearray()
@@ -62,8 +66,38 @@ def glass(x, y, w, h, outline=False, subtle=False):
     a = coverage*(base+rim*117+bevel*19)
     return (clamp(184+55*rim),clamp(195+48*rim),clamp(240+15*rim),clamp(a))
 
+def landscape(x,y,w,h):
+    u,v=x/w,y/h
+    # Original illustrated twilight lake and mountain silhouette, no borrowed assets.
+    sky=min(1,v/.64)
+    r=64+107*sky;g=78+34*sky;b=153+32*sky
+    moon=math.hypot((u-.77)*w/h,v-.18)
+    if moon<.13:
+        glow=max(0,min(1,(.13-moon)*130))
+        r=r*(1-glow)+234*glow;g=g*(1-glow)+218*glow;b=b*(1-glow)+250*glow
+    if v<.6:
+        cloud=math.exp(-((v-.35-.034*math.sin(u*22))/.022)**2)*(.5+.5*math.sin(u*15)**2)
+        r+=40*cloud;g+=20*cloud;b+=19*cloud
+    def ridge(t):
+        return .67-.28*max(0,1-abs(t-.48)/.32)-.07*math.exp(-((t-.13)/.13)**2)+.017*math.sin(t*34)
+    horizon=.68
+    rv=v if v<=horizon else horizon-(v-horizon)*.72
+    if rv>ridge(u) and rv<horizon:
+        snow=max(0,min(1,(ridge(u)+.075-rv)*35)) if abs(u-.48)<.21 else 0
+        r=57+130*snow;g=73+116*snow;b=123+107*snow
+    if v>=horizon:
+        shimmer=(.5+.5*math.sin(v*410+math.sin(u*63)*2))**9
+        a=.65+(v-horizon)*.6
+        r=r*.56+40+shimmer*42;g=g*.52+35+shimmer*25;b=b*.6+55
+        r*=a;g*=a;b*=a
+    # Subtle darkening under centered lock-screen text.
+    shade=1-.15*math.exp(-((u-.5)*2.8)**2)
+    return clamp(r*shade),clamp(g*shade),clamp(b*shade),255
+
 def main(root):
     png(root/"Background.png", wallpaper)
+    png(root/"GlassNX"/"Lockscreen.png",landscape,(1920,1080))
+    png(root/"GlassNX"/"Unlock.png",glass,(640,140))
     for name in ("Default","Application","Folder","Homebrew"):
         png(root/"Main"/"TopMenuBackground"/(name+".png"),glass)
     for name in ("Main/InputBarBackground.png","Settings/InputBarBackground.png"):

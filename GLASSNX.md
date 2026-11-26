@@ -21,3 +21,9 @@ The default main menu now renders a separate controller/touch-driven GlassShell 
 
 ### v0.2 rendering and hardware follow-up
 Cached half-resolution textured glass bevels and reflective edges replace flat card fills. The GPU composites the cached surfaces, not live backdrop refraction. Home and Control Center query actual battery, SD free space and SoC temperature; brightness and master volume use libnx with service-result checks and display Unavailable if unsupported. Controller left/right adjusts a focused slider, up/down changes selection. Touch adjusts slider position. Brightness is clamped to at least 10%. No CPU/GPU/RAM clocks are changed. Service behavior and visual performance still need hardware confirmation.
+
+## v0.3 — visual fidelity and personalization
+- Wallpaper-aware cached glass with low-resolution blur and edge displacement; no live game/backbuffer sampling. Optional custom wide title artwork at `/ulaunch/glassnx/art/<16-digit-title-id>.jpg` (8 MiB file limit); real installed icon fallback. Use your own art; none downloaded automatically.
+- Search via X and Switch keyboard, favorites via left-stick click, A-Z sort via touch, appearance previews, theme selection via X on Settings, saved transparency/blur/motion. Favorites and preferences are separate for sysMMC/emuMMC, shared across users in each environment.
+- Persistent 24-item notification history, top-right toasts, illustrated twilight lock wallpaper and custom `/ulaunch/glassnx/lockscreen.jpg` override. Page transition is a time-based fade, not spring physics.
+- All six pages are still a development implementation; no device screenshot or successful Switch compile yet. Full live GPU refraction, exact hero artwork, advanced categories, fan/overclock settings and 60fps measurement remain outstanding.
