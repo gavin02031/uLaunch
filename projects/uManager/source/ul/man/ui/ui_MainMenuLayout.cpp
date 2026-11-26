@@ -51,7 +51,7 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::ResetInfoText() {
-        std::string info = "GlassNX Manager v0.8";
+        std::string info = "GlassNX Manager v0.9";
         if(g_MainApplication->IsAvailable()) {
             const auto ver = g_MainApplication->GetVersion();
             info += " | HOME service version " + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);
@@ -94,7 +94,7 @@ namespace ul::man::ui {
         
         this->update_menu_item = pu::ui::elm::MenuItem::New("About / updates");
         this->update_menu_item->SetColor(MenuItemColor);
-        this->update_menu_item->AddOnKey([](){g_MainApplication->CreateShowDialog("GlassNX v0.8","Updates: github.com/gavin02031/uLaunch/tree/glassnx\nBased on XorTroll's uLaunch. Stock updater disabled.",{"OK"},true);});
+        this->update_menu_item->AddOnKey([](){g_MainApplication->CreateShowDialog("GlassNX v0.9","Updates: github.com/gavin02031/uLaunch/tree/glassnx\nBased on XorTroll's uLaunch. Stock updater disabled.",{"OK"},true);});
         this->options_menu->AddItem(this->update_menu_item);
 
         this->Add(this->options_menu);

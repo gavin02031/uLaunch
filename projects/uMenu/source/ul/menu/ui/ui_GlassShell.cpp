@@ -361,7 +361,31 @@ namespace ul::menu::ui {
             auto t=pu::ui::elm::TextBlock::New(0,0,s);
             t->SetFont(pu::ui::MakeDefaultFontName(size));
             t->SetColor({255,255,255,255});
-            if(maxw>0)t->SetClampWidth(maxw);
+            // Fit once when caching rather than letting long titles marquee
+            // into an arbitrary cropped middle. Preserve UTF-8 boundaries.
+            if(maxw>0 && t->GetWidth()>maxw) {
+                if(size>=45) {
+                    for(int candidate:{45,37,30}) {
+                        if(candidate>=size)continue;
+                        t->SetFont(pu::ui::MakeDefaultFontName(candidate));
+                        if(t->GetWidth()<=maxw)break;
+                    }
+                }
+                if(t->GetWidth()>maxw) {
+                    std::vector<size_t> boundaries{0};
+                    for(size_t i=1;i<s.size();i++)
+                        if((static_cast<unsigned char>(s[i])&0xc0)!=0x80)boundaries.push_back(i);
+                    boundaries.push_back(s.size());
+                    size_t lo=0,hi=boundaries.size()-1;
+                    while(lo<hi) {
+                        const size_t mid=(lo+hi+1)/2;
+                        t->SetText(s.substr(0,boundaries[mid])+"…");
+                        if(t->GetWidth()<=maxw)lo=mid;else hi=mid-1;
+                    }
+                    t->SetText(s.substr(0,boundaries[lo])+"…");
+                    if(t->GetWidth()>maxw)t->SetClampWidth(maxw);
+                }
+            }
             it=texts.emplace(key,t).first;
         }
         const auto &t=it->second;
@@ -435,7 +459,30 @@ namespace ul::menu::ui {
             vertices[1+c*8+i]=vertex(cx[c]+rad*cosf(a),cy[c]+rad*sinf(a));
         }
         for(int i=0;i<32;i++){inds[i*3]=0;inds[i*3+1]=1+i;inds[i*3+2]=1+(i+1)%32;}
-        if(SDL_RenderGeometry(pu::ui::render::GetMainRenderer(),t->Get(),vertices,33,inds,96)!=0)Cover(r,t,x,y,w,h);
+        auto rr=pu::ui::render::GetMainRenderer();
+        if(SDL_RenderGeometry(rr,t->Get(),vertices,33,inds,96)==0)return;
+        // Some Switch SDL backends do not implement textured geometry.
+        // Clip using horizontal texture bands instead of falling back to square art.
+        const int corner=std::max(1,int(rad));
+        auto band=[&](int y0,int y1,int inset) {
+            if(y1<=y0||w<=2*inset)return;
+            const int sx0=std::clamp(int((u0+uw*float(inset)/w)*tw),0,tw-1);
+            const int sx1=std::clamp(int(std::ceil((u0+uw*float(w-inset)/w)*tw)),sx0+1,tw);
+            const int sy0=std::clamp(int((v0+vh*float(y0)/h)*th),0,th-1);
+            const int sy1=std::clamp(int(std::ceil((v0+vh*float(y1)/h)*th)),sy0+1,th);
+            SDL_Rect src{sx0,sy0,sx1-sx0,sy1-sy0};
+            SDL_Rect dst{x+inset,y+y0,w-2*inset,y1-y0};
+            SDL_RenderCopy(rr,t->Get(),&src,&dst);
+        };
+        const int step=std::max(1,corner/12);
+        for(int a=0;a<corner;a+=step) {
+            const int b=std::min(a+step,corner);
+            const float dy=corner-(a+b)*.5f;
+            const int inset=std::max(0,int(std::ceil(corner-std::sqrt(std::max(0.f,float(corner*corner)-dy*dy)))));
+            band(a,b,inset);band(h-b,h-a,inset);
+        }
+        band(corner,h-corner,0);
+        (void)r;
     }
     void GlassShell::Tile(Renderer &r,u32 index,int x,int y,int w,int h,bool selected) {
         if(selected)r->RenderRoundedRectangleFill({150,168,229,static_cast<u8>(motion?45+40*focus_lift:85)},x,y,w,h,32);
@@ -446,10 +493,11 @@ namespace ul::menu::ui {
         const int lift=selected&&motion?int(5*focus_lift):0;
         const int side=base_side+lift*2;
         const int ix=x+(w-side)/2,iy=y+5-lift;
-        r->RenderRoundedRectangleFill({15,20,45,75},ix,iy+5,side,side,25);
-        if(icon)RoundedArt(r,icon,ix,iy,side,side,25);
+        const int rounding=std::max(20,side/6);
+        r->RenderRoundedRectangleFill({15,20,45,65},ix,iy+5,side,side,rounding);
+        if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
         else {Card(r,ix,iy,side,side);Glyph(r,e.Is<EntryType::Folder>()?"storage":"apps",x+w/2-34,y+h/2-55,68);}
-        if(selected)r->RenderRoundedRectangle({224,236,255,255},ix-3,iy-3,side+6,side+6,27);
+        if(selected)r->RenderRoundedRectangle({224,236,255,225},ix-3,iy-3,side+6,side+6,rounding+3);
         const auto name=EntryName(e);
         Label(r,name,x+w/2,y+h-35,27,w-10,true);
         if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id)) {
@@ -579,7 +627,7 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});break;
                     case 7:
-                        row("GlassNX","Version 0.8",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.9",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Recovery","Legacy interface",legacy);break;
                 }
@@ -713,7 +761,8 @@ namespace ul::menu::ui {
         Picture(r,GetBackgroundTexture(),0,0,1920,1080);
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
-        Label(r,"GlassNX",128,34,45);
+        Label(r,"GlassNX",128,25,45);
+        Label(r,"v0.9",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -762,13 +811,18 @@ namespace ul::menu::ui {
                         SDL_SetTextureColorMod(tex,rr,gg,bb);
                         HeroShade(105,175,1090,365);
                     }
-                    RoundedArt(r,icon,805,165,390,390,34);
+                    RoundedArt(r,icon,805,165,390,390,58);
                 }
                 Label(r,suspended?"CONTINUE PLAYING":"FEATURED GAME",112,185,30);
-                Label(r,EntryName(e),112,260,64,680);
+                Label(r,EntryName(e),112,260,64,650);
                 Label(r,suspended?"Currently suspended":"Ready to play",112,362,30,680);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
-                if(suspended)Button(r,385,445,220,78,"Close game",false,close_suspended);
+                if(suspended) {
+                    r->RenderRoundedRectangleFill({126,56,89,160},380,445,300,78,39);
+                    r->RenderRoundedRectangle({255,198,211,130},380,445,300,78,39);
+                    Label(r,"X  Close Game",530,465,30,270,true);
+                    hits.push_back({380,445,300,78,close_suspended});
+                }
                 else if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id))Label(r,"Favorite",405,466,27);
             } else {
                 Label(r,"Your home awaits",112,245,64);
