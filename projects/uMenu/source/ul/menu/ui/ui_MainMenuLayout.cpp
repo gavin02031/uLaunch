@@ -1088,6 +1088,10 @@ namespace ul::menu::ui {
             this->StartResume();
         }
         else {
+            if(this->glass_mode) {
+                this->glass_shell->Invalidate();
+                return true;
+            }
             if(!this->entry_menu->IsInRoot() && this->entry_menu->IsMenuStart()) {
                 this->MoveToRoot(true);
             }

@@ -19,6 +19,15 @@ namespace ul::menu::ui {
         int filter = 0;
         bool touched = false;
         bool icon_budget = true;
+        float brightness = -1, volume = -1;
+        int temperature = -1;
+        s64 free_bytes = -1, total_bytes = -1;
+        std::chrono::steady_clock::time_point next_metrics{};
+        std::map<std::string, pu::sdl2::TextureHandle::Ref> materials;
+        void ReadMetrics();
+        void AdjustSlider(bool display, float target);
+        void Slider(Renderer &r,int x,int y,int w,int h,const std::string &name,float value,bool selected);
+        pu::sdl2::TextureHandle::Ref Material(int w,int h,bool selected);
         std::map<std::string, pu::ui::elm::TextBlock::Ref> texts;
         struct Hit { int x,y,w,h; std::function<void()> action; };
         std::vector<Hit> hits;

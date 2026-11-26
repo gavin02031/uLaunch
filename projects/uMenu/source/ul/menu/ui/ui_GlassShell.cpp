@@ -3,6 +3,8 @@
 #include <ul/menu/ui/ui_Common.hpp>
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
+#include <switch/runtime/devices/fs_dev.h>
 
 extern ul::menu::ui::GlobalSettings g_GlobalSettings;
 extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
@@ -54,15 +56,50 @@ namespace ul::menu::ui {
     void GlassShell::Picture(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h) {
         if(t && t->Get()) r->RenderTexture(t->Get(),x,y,pu::ui::render::TextureRenderOptions({},w,h,{},{},{}));
     }
+    pu::sdl2::TextureHandle::Ref GlassShell::Material(int w,int h,bool selected) {
+        const auto key=std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(selected);
+        auto it=materials.find(key);if(it!=materials.end())return it->second;
+        // Cache at half logical resolution; the GPU composites the translucent
+        // textured bevel. No per-frame rasterization or framebuffer readback.
+        const int tw=(w+1)/2,th=(h+1)/2;
+        const float radius=std::min(17.f,th/3.f);
+        const auto tint=GlassColors[theme];
+        std::vector<u8> rgba(static_cast<size_t>(tw)*th*4);
+        auto byte=[](float v){return static_cast<u8>(std::clamp(v,0.f,255.f));};
+        for(int py=0;py<th;py++) for(int px=0;px<tw;px++) {
+            const float qx=std::abs(px+.5f-tw*.5f)-(tw*.5f-radius-1);
+            const float qy=std::abs(py+.5f-th*.5f)-(th*.5f-radius-1);
+            const float ox=std::max(qx,0.f),oy=std::max(qy,0.f);
+            const float d=std::sqrt(ox*ox+oy*oy)+std::min(std::max(qx,qy),0.f)-radius;
+            const float cover=std::clamp(.8f-d,0.f,1.f);
+            const float v=float(py)/th;
+            const float rim=std::max(0.f,1.f-std::abs(d+1.6f)/3.4f);
+            const float light=std::max(0.f,1.f-std::abs(d+5.f)/7.f);
+            const float shine=(1.f-v)*.12f+rim*(selected?.8f:.58f)+light*.15f;
+            const auto p=(static_cast<size_t>(py)*tw+px)*4;
+            rgba[p]=byte(tint.r+(255-tint.r)*shine);
+            rgba[p+1]=byte(tint.g+(255-tint.g)*shine);
+            rgba[p+2]=byte(tint.b+(255-tint.b)*shine);
+            rgba[p+3]=byte(cover*((100-glass)*1.65f+42+22*(1-v)+rim*(selected?185:130)+light*32));
+        }
+        auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
+        if(!tex)return {};
+        if(SDL_UpdateTexture(tex,nullptr,rgba.data(),tw*4)!=0 || SDL_SetTextureBlendMode(tex,SDL_BLENDMODE_BLEND)!=0) {SDL_DestroyTexture(tex);return {};}
+        if(materials.size()>=48)materials.clear();
+        auto handle=pu::sdl2::TextureHandle::New(tex);materials.emplace(key,handle);return handle;
+    }
     void GlassShell::Card(Renderer &r,int x,int y,int w,int h,bool selected) {
         const int radius=std::min(34,h/3);
-        const auto c=GlassColors[theme];
-        r->RenderRoundedRectangleFill({23,26,65,65},x+3,y+7,w,h,radius);
-        r->RenderRoundedRectangleFill({c.r,c.g,c.b,static_cast<u8>(glass*2)},x,y,w,h,radius);
-        r->RenderRoundedRectangle({233,239,255,selected?u8(255):u8(135)},x,y,w,h,radius);
-        r->RenderRoundedRectangle({255,255,255,selected?u8(160):u8(55)},x+3,y+3,w-6,h-6,radius-3);
+        r->RenderRoundedRectangleFill({23,26,65,55},x+2,y+6,w,h,radius);
+        const auto tex=Material(w,h,selected);
+        if(tex)Picture(r,tex,x,y,w,h);
+        else {
+            const auto c=GlassColors[theme];
+            r->RenderRoundedRectangleFill({c.r,c.g,c.b,100},x,y,w,h,radius);
+            r->RenderRoundedRectangle({233,239,255,135},x,y,w,h,radius);
+        }
         if(selected) {
-            r->RenderRoundedRectangle({185,228,255,155},x-5,y-5,w+10,h+10,radius+5);
+            r->RenderRoundedRectangle({185,228,255,115},x-5,y-5,w+10,h+10,radius+5);
             r->RenderRoundedRectangle({238,248,255,255},x-2,y-2,w+4,h+4,radius+2);
         }
     }
@@ -103,6 +140,62 @@ namespace ul::menu::ui {
         if(R_SUCCEEDED(rc)) {value=next;g_MenuApplication->ShowNotification(std::string(wifi?"Wi-Fi ":"Bluetooth ")+(next?"enabled":"disabled"));}
         else g_MenuApplication->ShowNotification("Unable to change system setting");
     }
+    void GlassShell::ReadMetrics() {
+        const auto now=std::chrono::steady_clock::now();
+        if(now<next_metrics)return;
+        next_metrics=now+std::chrono::seconds(2);
+        brightness=volume=-1;temperature=-1;free_bytes=total_bytes=-1;
+        if(R_SUCCEEDED(lblInitialize())) {
+            float v=0;if(R_SUCCEEDED(lblGetCurrentBrightnessSetting(&v)) && std::isfinite(v))brightness=std::clamp(v,0.f,1.f);
+            lblExit();
+        }
+        if(R_SUCCEEDED(audctlInitialize())) {
+            float v=0;if(R_SUCCEEDED(audctlGetSystemOutputMasterVolume(&v)) && std::isfinite(v))volume=std::clamp(v,0.f,1.f);
+            audctlExit();
+        }
+        if(R_SUCCEEDED(tsInitialize())) {
+            s32 v=0;if(R_SUCCEEDED(tsGetTemperature(TsLocation_External,&v)) && v>=0 && v<=120)temperature=v;
+            tsExit();
+        }
+        auto fs=fsdevGetDeviceFileSystem("sdmc");
+        if(fs) {
+            s64 value=0;if(R_SUCCEEDED(fsFsGetFreeSpace(fs,"/",&value)) && value>=0)free_bytes=value;
+            if(R_SUCCEEDED(fsFsGetTotalSpace(fs,"/",&value)) && value>0)total_bytes=value;
+        }
+    }
+    void GlassShell::AdjustSlider(bool display,float target) {
+        // Keep the screen readable; never request a completely black display.
+        target=std::clamp(target,display?.10f:0.f,1.f);
+        bool ok=false;
+        if(display) {
+            if(brightness<0)return;
+            if(R_SUCCEEDED(lblInitialize())) {
+                if(R_SUCCEEDED(lblSetCurrentBrightnessSetting(target)))ok=R_SUCCEEDED(lblApplyCurrentBrightnessSettingToBacklight());
+                lblExit();
+            }
+            if(ok)brightness=target;
+        } else {
+            if(volume<0)return;
+            if(R_SUCCEEDED(audctlInitialize())) {
+                ok=R_SUCCEEDED(audctlSetSystemOutputMasterVolume(target));audctlExit();
+            }
+            if(ok)volume=target;
+        }
+        if(!ok)g_MenuApplication->ShowNotification("Control is unavailable");
+        next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    }
+    void GlassShell::Slider(Renderer &r,int x,int y,int w,int h,const std::string &name,float value,bool selected) {
+        Card(r,x,y,w,h,selected);
+        Label(r,name,x+26,y+22,37);
+        Label(r,value<0?"Unavailable":std::to_string(int(value*100+.5f))+"%",x+w-220,y+28,30);
+        const int left=x+30,top=y+h-53,width=w-60;
+        r->RenderRoundedRectangleFill({32,38,74,100},left,top,width,20,10);
+        if(value>=0) {
+            int amount=int(width*value);
+            if(amount>0)r->RenderRoundedRectangleFill({235,240,255,240},left,top,amount,20,10);
+            r->RenderCircleFill({255,255,255,255},left+amount,top+10,18);
+        }
+    }
     std::vector<GlassShell::Choice> GlassShell::Choices() {
         std::vector<Choice> c;
         if(page==Page::Settings) {
@@ -113,13 +206,15 @@ namespace ul::menu::ui {
                {466,710,1360,105,"Installed themes","Open theme manager",[](){ShowThemesMenu();}},
                {466,835,1360,105,"Recovery / legacy menu","Return to uLaunch interface",legacy}};
         } else if(page==Page::Control) {
-            c={{70,435,420,170,"Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);}},
-               {510,435,420,170,"Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);}},
-               {950,435,420,170,"Controllers","Connect or configure",[](){ShowController();}},
-               {1390,435,460,170,"Power","Sleep / reboot / shutdown",[](){ShowPowerDialog();}},
-               {70,640,560,200,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
-               {650,640,560,200,"Display & audio","Open system settings",[](){ShowSettingsMenu();}},
-               {1230,640,620,200,"Lock screen","Lock now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}}};
+            c={{70,420,875,155,"Brightness","",[this](){AdjustSlider(true,brightness+.10f);}},
+               {975,420,875,155,"Volume","",[this](){AdjustSlider(false,volume+.10f);}},
+               {70,605,420,145,"Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);}},
+               {510,605,420,145,"Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);}},
+               {950,605,420,145,"Controllers","Connect or configure",[](){ShowController();}},
+               {1390,605,460,145,"Power","Sleep / reboot / shutdown",[](){ShowPowerDialog();}},
+               {70,780,560,145,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
+               {650,780,560,145,"System settings","Open settings",[](){ShowSettingsMenu();}},
+               {1230,780,620,145,"Lock screen","Lock now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}}};
         } else if(page==Page::Notifications) {
             c={{430,905,510,90,"View / clear history","",[](){g_MenuApplication->ShowNotificationHistory();}},
                {980,905,510,90,"Back","",[this](){SetPage(previous);}}};
@@ -149,6 +244,10 @@ namespace ul::menu::ui {
         if(touch.IsEmpty())touched=false;
         else if(!touched) {
             touched=true;
+            if(page==Page::Control) {
+                if(touch.HitsRegion(70,420,875,155)){focus=0;AdjustSlider(true,float(touch.x-100)/815.f);return;}
+                if(touch.HitsRegion(975,420,875,155)){focus=1;AdjustSlider(false,float(touch.x-1005)/815.f);return;}
+            }
             for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)) {auto action=hit.action;action();return;}
         }
         if(down&HidNpadButton_Minus){legacy();return;}
@@ -160,6 +259,11 @@ namespace ul::menu::ui {
         if(down&HidNpadButton_Y){
             if(page==Page::Library || page==Page::Apps){filter=(filter+1)%(page==Page::Library?3:2);focus=0;offset=0;}return;
         }
+        if(page==Page::Control && focus<2 && (down&(HidNpadButton_Left|HidNpadButton_Right|HidNpadButton_StickLLeft|HidNpadButton_StickLRight))) {
+            const float delta=(down&(HidNpadButton_Right|HidNpadButton_StickLRight))?.05f:-.05f;
+            AdjustSlider(focus==0,(focus==0?brightness:volume)+delta);
+            return;
+        }
         if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft))Move(-1);
         else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight))Move(1);
         else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp))Move(page==Page::Library||page==Page::Apps?-5:-1);
@@ -168,6 +272,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;
+        if(page==Page::Home || page==Page::Control)ReadMetrics();
         Picture(r,GetBackgroundTexture(),0,0,1920,1080);
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         Picture(r,GetSelectedUserIconTexture(),44,28,68,68);
@@ -185,9 +290,14 @@ namespace ul::menu::ui {
             Card(r,70,140,1160,435);
             Card(r,1260,140,590,205);Card(r,1260,365,590,210);
             Label(r,"SYSTEM OVERVIEW",1300,166,30);
-            Label(r,Battery(),1300,214,64);Label(r,os::IsConsoleCharging()?"Charging":"Battery",1510,241,30);
-            Label(r,"YOUR LIBRARY",1300,391,30);Label(r,std::to_string(list.size())+" entries",1300,446,45);
-            Label(r,"In this folder",1300,506,27);
+            Label(r,Battery(),1300,214,64);Label(r,temperature<0?"Temperature N/A":std::to_string(temperature)+" C",1530,241,30,275);
+            Label(r,"SD STORAGE",1300,391,30);
+            Label(r,free_bytes<0?"Unavailable":std::to_string(free_bytes/(1024LL*1024LL*1024LL))+" GiB free",1300,446,45,500);
+            if(total_bytes>0 && free_bytes>=0) {
+                r->RenderRoundedRectangleFill({32,38,74,100},1300,520,500,17,8);
+                const auto used=std::clamp(1.0-double(free_bytes)/double(total_bytes),0.0,1.0);
+                if(used>0)r->RenderRoundedRectangleFill({235,240,255,225},1300,520,int(500*used),17,8);
+            }
             if(!list.empty()) {
                 const auto idx=list[focus];auto &e=entries->GetEntries()[idx];
                 const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
@@ -237,9 +347,8 @@ namespace ul::menu::ui {
                 Label(r,"Saved settings: legacy",95,855,27);
             } else if(control) {
                 Card(r,70,240,560,165);Label(r,"BATTERY",103,260,30);Label(r,Battery(),103,310,64);
-                Card(r,650,240,560,165);Label(r,"CONNECTION",683,260,30);Label(r,g_GlobalSettings.wireless_lan_enabled?"Wi-Fi enabled":"Offline",683,319,37);
-                Card(r,1230,240,620,165);Label(r,"POWER PROFILE",1263,260,30);Label(r,"System default",1263,319,37);
-                Label(r,"Brightness / volume / clock controls: not available in this build.",70,895,30);
+                Card(r,650,240,560,165);Label(r,"SOC TEMPERATURE",683,260,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",683,310,64);
+                Card(r,1230,240,620,165);Label(r,"PERFORMANCE",1263,260,30);Label(r,"Stock clocks",1263,319,37);
             } else {
                 const auto &history=g_MenuApplication->GetNotificationHistory();
                 if(history.empty()) {Card(r,430,270,1060,170);Label(r,"You're all caught up.",960,325,45,0,true);}
@@ -250,7 +359,9 @@ namespace ul::menu::ui {
             }
             auto choices=Choices();focus=std::clamp(focus,0,std::max(0,static_cast<int>(choices.size())-1));
             for(size_t i=0;i<choices.size();++i) {
-                auto &c=choices[i];Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
+                auto &c=choices[i];
+                if(control && i<2) {Slider(r,c.x,c.y,c.w,c.h,c.label,i==0?brightness:volume,focus==static_cast<int>(i));continue;}
+                Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
                 Label(r,c.label,c.x+25,c.y+15,37,c.w-50);
                 Label(r,c.detail,c.x+25,c.y+65,27,c.w-50);
                 hits.push_back({c.x,c.y,c.w,c.h,c.action});

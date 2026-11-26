@@ -71,9 +71,9 @@ namespace ul::menu::ui {
 
     void IMenuLayout::InitializeTimeText(MultiTextBlock::Ref &time_mtext, const std::string &ui_menu, const std::string &ui_name) {
         time_mtext = MultiTextBlock::New(0, 0);
-        time_mtext->Add(pu::ui::elm::TextBlock::New(0, 0, "99"));
+        time_mtext->Add(pu::ui::elm::TextBlock::New(0, 0, "00"));
         time_mtext->Add(pu::ui::elm::TextBlock::New(0, 0, ":"));
-        time_mtext->Add(pu::ui::elm::TextBlock::New(0, 0, "99"));
+        time_mtext->Add(pu::ui::elm::TextBlock::New(0, 0, "00"));
         g_GlobalSettings.ApplyConfigForElement(ui_menu, ui_name, time_mtext);
         for(auto &text: time_mtext->GetAll()) {
             text->SetColor(g_MenuApplication->GetTextColor());
@@ -112,6 +112,7 @@ namespace ul::menu::ui {
 
         if(time_changed) {
             this->last_time = cur_time;
+            time_mtext->UpdatePositionsSizes();
         }
     }
 
