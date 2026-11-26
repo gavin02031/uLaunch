@@ -20,7 +20,7 @@ namespace ul::menu::ui {
     }
 
     LockscreenMenuLayout::LockscreenMenuLayout() : IMenuLayout() {
-        auto custom=pu::ui::render::LoadImageFromFile("sdmc:/ulaunch/glassnx/lockscreen.jpg");
+        auto custom=pu::ui::render::LoadImageFromFile("sdmc:/glassnx/lockscreen.jpg");
         if(custom) this->SetBackgroundImage(pu::sdl2::TextureHandle::New(custom));
         else {
             auto scene=TryFindLoadImage("ui/GlassNX/Lockscreen");

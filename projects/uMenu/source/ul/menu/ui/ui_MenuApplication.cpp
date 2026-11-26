@@ -8,7 +8,7 @@ extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 namespace ul::menu::ui {
     namespace {
         const char *HistoryPath() {
-            return g_GlobalSettings.ams_is_emummc?"sdmc:/ulaunch/glassnx-emu.alerts":"sdmc:/ulaunch/glassnx-sys.alerts";
+            return g_GlobalSettings.ams_is_emummc?"sdmc:/glassnx/glassnx-emu.alerts":"sdmc:/glassnx/glassnx-sys.alerts";
         }
         void ReadHistory(std::vector<std::string> &out) {
             auto fp=fopen(HistoryPath(),"rb");if(!fp)return;

@@ -23,17 +23,17 @@ namespace ul::man::ui {
         }
 
         inline std::string GetStatus() {
-            std::string status = GetLanguageString("status") + ": ";
+            std::string status = "GlassNX: ";
             if(IsBasePresent()) {
                 if(IsSystemActive()) {
-                    status += GetLanguageString("status_active");
+                    status += "Enabled on SD";
                 }
                 else {
-                    status += GetLanguageString("status_not_active");
+                    status += "Not enabled (A to enable)";
                 }
             }
             else {
-                status += GetLanguageString("status_not_present");
+                status += "Installation incomplete";
             }
 
             return status;
@@ -51,10 +51,10 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::ResetInfoText() {
-        std::string info = "uManager v" UL_VERSION ", uLaunch's manager";
+        std::string info = "GlassNX Manager v0.5";
         if(g_MainApplication->IsAvailable()) {
             const auto ver = g_MainApplication->GetVersion();
-            info += " | running uLaunch v" + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);
+            info += " | HOME service version " + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);
             if(!g_MainApplication->IsVersionMatch()) {
                 info += " (unexpected version)";
             }
@@ -92,9 +92,9 @@ namespace ul::man::ui {
         this->reset_cache_menu_item->AddOnKey(std::bind(&MainMenuLayout::resetCache_DefaultKey, this));
         this->options_menu->AddItem(this->reset_cache_menu_item);
         
-        this->update_menu_item = pu::ui::elm::MenuItem::New(GetLanguageString("update_item"));
+        this->update_menu_item = pu::ui::elm::MenuItem::New("About / updates");
         this->update_menu_item->SetColor(MenuItemColor);
-        this->update_menu_item->AddOnKey(std::bind(&MainMenuLayout::update_DefaultKey, this));
+        this->update_menu_item->AddOnKey([](){g_MainApplication->CreateShowDialog("GlassNX v0.5","Updates: github.com/gavin02031/uLaunch/tree/glassnx\nBased on XorTroll's uLaunch. Stock updater disabled.",{"OK"},true);});
         this->options_menu->AddItem(this->update_menu_item);
 
         this->Add(this->options_menu);
@@ -104,11 +104,10 @@ namespace ul::man::ui {
 
     void MainMenuLayout::activate_DefaultKey() {
         if(IsBasePresent()) {
-            if(IsSystemActive()) {
-                DeactivateSystem();
-            }
-            else {
-                ActivateSystem();
+            const bool ok=IsSystemActive()?DeactivateSystem():ActivateSystem();
+            if(!ok) {
+                g_MainApplication->CreateShowDialog("GlassNX","Could not change HOME override. If another exefs.nsp is installed, back it up and remove that file only before enabling GlassNX.",{"OK"},true);
+                return;
             }
 
             this->activate_menu_item->SetName(GetStatus());

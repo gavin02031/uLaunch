@@ -6,7 +6,7 @@ export VERSION	:=	$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO)
 export UL_DEFS	:=	-DUL_MAJOR=$(VERSION_MAJOR) -DUL_MINOR=$(VERSION_MINOR) -DUL_MICRO=$(VERSION_MICRO) -DUL_VERSION=\"$(VERSION)\"
 
 OUT_DIR				:=	SdOut
-OUT_DIR_ZIP			:=	uLaunch-v$(VERSION)
+OUT_DIR_ZIP			:=	GlassNX-v0.5
 
 OUT_THEME_MUSIC		:=	default-theme-music-v$(VERSION).ultheme
 THEME_MUSIC_TEMP	:=	default-theme-music-tmp
@@ -40,37 +40,37 @@ usystem: arc libs
 	@$(MAKE) -C projects/uSystem
 	@mkdir -p $(OUT_DIR)/atmosphere/contents/0100000000001000
 	@cp projects/uSystem/out/nintendo_nx_arm64_armv8a/release/uSystem.nsp $(OUT_DIR)/atmosphere/contents/0100000000001000/exefs.nsp
-	@mkdir -p $(OUT_DIR)/ulaunch/bin/uSystem
-	@cp projects/uSystem/out/nintendo_nx_arm64_armv8a/release/uSystem.nsp $(OUT_DIR)/ulaunch/bin/uSystem/exefs.nsp
+	@mkdir -p $(OUT_DIR)/glassnx/bin/uSystem
+	@cp projects/uSystem/out/nintendo_nx_arm64_armv8a/release/uSystem.nsp $(OUT_DIR)/glassnx/bin/uSystem/exefs.nsp
 
 uloader: arc libs
 	@$(MAKE) -C projects/uLoader
-	@mkdir -p $(OUT_DIR)/ulaunch/bin/uLoader
-	@mkdir -p $(OUT_DIR)/ulaunch/bin/uLoader/applet
-	@cp projects/uLoader/uLoader.nso $(OUT_DIR)/ulaunch/bin/uLoader/applet/main
-	@cp projects/uLoader/uLoader_applet.npdm $(OUT_DIR)/ulaunch/bin/uLoader/applet/main.npdm
-	@mkdir -p $(OUT_DIR)/ulaunch/bin/uLoader/application
-	@cp projects/uLoader/uLoader.nso $(OUT_DIR)/ulaunch/bin/uLoader/application/main
-	@cp projects/uLoader/uLoader_application.npdm $(OUT_DIR)/ulaunch/bin/uLoader/application/main.npdm
+	@mkdir -p $(OUT_DIR)/glassnx/bin/uLoader
+	@mkdir -p $(OUT_DIR)/glassnx/bin/uLoader/applet
+	@cp projects/uLoader/uLoader.nso $(OUT_DIR)/glassnx/bin/uLoader/applet/main
+	@cp projects/uLoader/uLoader_applet.npdm $(OUT_DIR)/glassnx/bin/uLoader/applet/main.npdm
+	@mkdir -p $(OUT_DIR)/glassnx/bin/uLoader/application
+	@cp projects/uLoader/uLoader.nso $(OUT_DIR)/glassnx/bin/uLoader/application/main
+	@cp projects/uLoader/uLoader_application.npdm $(OUT_DIR)/glassnx/bin/uLoader/application/main.npdm
 
 umenu: arc libs
 	@$(MAKE) -C projects/uMenu
-	@mkdir -p $(OUT_DIR)/ulaunch/bin/uMenu
-	@mkdir -p $(OUT_DIR)/ulaunch/lang/uMenu
-	@mkdir -p $(OUT_DIR)/ulaunch/themes
-	@cp projects/uMenu/uMenu.nso $(OUT_DIR)/ulaunch/bin/uMenu/main
-	@cp projects/uMenu/uMenu.npdm $(OUT_DIR)/ulaunch/bin/uMenu/main.npdm
+	@mkdir -p $(OUT_DIR)/glassnx/bin/uMenu
+	@mkdir -p $(OUT_DIR)/glassnx/lang/uMenu
+	@mkdir -p $(OUT_DIR)/glassnx/themes
+	@cp projects/uMenu/uMenu.nso $(OUT_DIR)/glassnx/bin/uMenu/main
+	@cp projects/uMenu/uMenu.npdm $(OUT_DIR)/glassnx/bin/uMenu/main.npdm
 	@cp assets/Logo.png projects/uMenu/romfs/Logo.png
 	@rm -rf projects/uMenu/romfs/default
 	@cp -r default-theme/ projects/uMenu/romfs/default/
 	@python3 tools/glassnx_assets.py projects/uMenu/romfs/default/ui
-	@build_romfs projects/uMenu/romfs $(OUT_DIR)/ulaunch/bin/uMenu/romfs.bin
+	@build_romfs projects/uMenu/romfs $(OUT_DIR)/glassnx/bin/uMenu/romfs.bin
 
 umanager: arc libs
 	@$(MAKE) -C projects/uManager
-	@mkdir -p $(OUT_DIR)/ulaunch/lang/uManager
+	@mkdir -p $(OUT_DIR)/glassnx/lang/uManager
 	@mkdir -p $(OUT_DIR)/switch
-	@cp projects/uManager/uManager.nro $(OUT_DIR)/switch/uManager.nro
+	@cp projects/uManager/uManager.nro $(OUT_DIR)/switch/GlassNXManager.nro
 
 uscreen:
 	@cd projects/uScreen && mvn package
@@ -95,6 +95,6 @@ default-theme-music:
 
 package: arc usystem uloader umenu umanager uscreen default-theme-music
 	@rm -rf $(OUT_DIR_ZIP).7z $(OUT_DIR_ZIP).zip
-	@cd $(OUT_DIR) && 7z a ../$(OUT_DIR_ZIP).7z atmosphere ulaunch switch
-	@cd $(OUT_DIR) && zip -r ../$(OUT_DIR_ZIP).zip atmosphere ulaunch switch
+	@cd $(OUT_DIR) && 7z a ../$(OUT_DIR_ZIP).7z atmosphere glassnx switch
+	@cd $(OUT_DIR) && zip -r ../$(OUT_DIR_ZIP).zip atmosphere glassnx switch
 	@echo "Packaged $(OUT_DIR) into $(OUT_DIR_ZIP).7z & $(OUT_DIR_ZIP).zip!"

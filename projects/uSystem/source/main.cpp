@@ -456,7 +456,7 @@ namespace {
         UpdateStatus();
 
         UL_LOG_INFO("Launching uMenu with start mode %d...", static_cast<u32>(st_mode));
-        return ecs::RegisterLaunchAsApplet(la::GetMenuProgramId(), static_cast<u32>(st_mode), "/ulaunch/bin/uMenu", std::addressof(g_CurrentStatus), sizeof(g_CurrentStatus));
+        return ecs::RegisterLaunchAsApplet(la::GetMenuProgramId(), static_cast<u32>(st_mode), "/glassnx/bin/uMenu", std::addressof(g_CurrentStatus), sizeof(g_CurrentStatus));
     }
 
     void ApplicationVerifyMain(void *ctx_raw) {
@@ -1051,7 +1051,7 @@ namespace {
                     }
     
                     // TODO (new): consider not asserting and sending the error result to uMenu instead? same for various other asserts in this code...
-                    UL_RC_ASSERT(ecs::RegisterLaunchAsApplet(hb_applet_takeover_program_id, 0, "/ulaunch/bin/uLoader/applet", &action.launch_loader.target_input, sizeof(action.launch_loader.target_input)));
+                    UL_RC_ASSERT(ecs::RegisterLaunchAsApplet(hb_applet_takeover_program_id, 0, "/glassnx/bin/uLoader/applet", &action.launch_loader.target_input, sizeof(action.launch_loader.target_input)));
 
                     g_LastLibraryAppletLaunchedNotMenu = true;
                     
@@ -1074,7 +1074,7 @@ namespace {
                         action.launch_homebrew_application.app_target_input.is_auto_game_recording = true;
                     }
 
-                    UL_RC_ASSERT(ecs::RegisterLaunchAsApplication(action.launch_homebrew_application.app_id, "/ulaunch/bin/uLoader/application", &action.launch_homebrew_application.app_target_input, sizeof(action.launch_homebrew_application.app_target_input), g_SelectedUser));
+                    UL_RC_ASSERT(ecs::RegisterLaunchAsApplication(action.launch_homebrew_application.app_id, "/glassnx/bin/uLoader/application", &action.launch_homebrew_application.app_target_input, sizeof(action.launch_homebrew_application.app_target_input), g_SelectedUser));
 
                     // Store target input of the launched application
                     g_LastHomebrewApplicationLaunchTarget = action.launch_homebrew_application.app_target_input;

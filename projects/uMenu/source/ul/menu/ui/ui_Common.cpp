@@ -296,7 +296,7 @@ namespace ul::menu::ui {
     }
 
     void ShowAboutDialog() {
-        g_MenuApplication->DisplayDialog("uLaunch v" + std::string(UL_VERSION), GetLanguageString("ulaunch_about") + ":\nhttps://github.com/XorTroll/uLaunch", { GetLanguageString("ok") }, true, g_LogoTexture);
+        g_MenuApplication->DisplayDialog("GlassNX v0.5", "Native Liquid Glass HOME replacement. Based on XorTroll's uLaunch.\nhttps://github.com/gavin02031/uLaunch/tree/glassnx", { GetLanguageString("ok") }, true);
     }
 
     void ShowSettingsMenu() {

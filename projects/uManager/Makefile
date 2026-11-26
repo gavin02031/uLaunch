@@ -44,10 +44,10 @@ INCLUDES	:=	include
 DATA		:=	data
 ROMFS		:=	romfs
 
-APP_TITLE   := uManager
-APP_AUTHOR  := XorTroll
+APP_TITLE   := GlassNX Manager
+APP_AUTHOR  := GlassNX (based on uLaunch)
 
-APP_VERSION := $(VERSION)
+APP_VERSION := 0.5
 
 #---------------------------------------------------------------------------------
 # options for code generation

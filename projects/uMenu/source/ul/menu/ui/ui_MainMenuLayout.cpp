@@ -784,6 +784,7 @@ namespace ul::menu::ui {
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
         this->SetGlassMode(true);
+        UL_LOG_INFO("GlassNX v0.5: custom HOME layout created and selected");
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
@@ -859,6 +860,7 @@ namespace ul::menu::ui {
     void MainMenuLayout::SetGlassMode(bool enabled) {
         this->glass_mode = enabled;
         this->glass_shell->SetVisible(enabled);
+        UL_LOG_INFO("GlassNX: shell visibility %d", int(enabled));
         this->entry_menu->SetVisible(!enabled);
         this->entry_menu->SetEnabled(!enabled);
         this->quick_menu->SetVisible(!enabled);
@@ -875,7 +877,7 @@ namespace ul::menu::ui {
         const auto quick_menu_on = !this->glass_mode && this->quick_menu->IsOn();
         if(this->last_quick_menu_on != quick_menu_on) {
             this->last_quick_menu_on = quick_menu_on;
-            this->entry_menu->SetEnabled(!quick_menu_on);
+            this->entry_menu->SetEnabled(!this->glass_mode && !quick_menu_on);
 
             if(quick_menu_on) {
                 pu::audio::PlaySfx(this->open_quick_menu_sfx);

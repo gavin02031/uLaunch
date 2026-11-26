@@ -9,30 +9,30 @@
 
 namespace ul {
 
-    constexpr const char RootPath[] = "sdmc:/ulaunch";
+    constexpr const char RootPath[] = "sdmc:/glassnx";
     constexpr const char DefaultLanguage[] = "en";
 
-    constexpr const char SysMMCConfigPath[] = "sdmc:/ulaunch/sys-config.cfg";
-    constexpr const char EmuMMCConfigPath[] = "sdmc:/ulaunch/emu-config.cfg";
+    constexpr const char SysMMCConfigPath[] = "sdmc:/glassnx/sys-config.cfg";
+    constexpr const char EmuMMCConfigPath[] = "sdmc:/glassnx/emu-config.cfg";
 
-    constexpr const char ThemesPath[] = "sdmc:/ulaunch/themes";
+    constexpr const char ThemesPath[] = "sdmc:/glassnx/themes";
     constexpr const char DefaultThemePath[] = "romfs:/default";
 
-    constexpr const char MenuLanguagesPath[] = "sdmc:/ulaunch/lang/uMenu";
-    constexpr const char MenuRomfsFile[] = "sdmc:/ulaunch/bin/uMenu/romfs.bin";
+    constexpr const char MenuLanguagesPath[] = "sdmc:/glassnx/lang/uMenu";
+    constexpr const char MenuRomfsFile[] = "sdmc:/glassnx/bin/uMenu/romfs.bin";
 
     constexpr const char BuiltinMenuLanguagesPath[] = "romfs:/lang";
 
-    constexpr const char RootCachePath[] = "sdmc:/ulaunch/cache";
-    constexpr const char HomebrewCachePath[] = "sdmc:/ulaunch/cache/hb";
-    constexpr const char ApplicationCachePath[] = "sdmc:/ulaunch/cache/app";
-    constexpr const char ThemePreviewCachePath[] = "sdmc:/ulaunch/cache/preview";
-    constexpr const char ActiveThemeCachePath[] = "sdmc:/ulaunch/cache/active";
+    constexpr const char RootCachePath[] = "sdmc:/glassnx/cache";
+    constexpr const char HomebrewCachePath[] = "sdmc:/glassnx/cache/hb";
+    constexpr const char ApplicationCachePath[] = "sdmc:/glassnx/cache/app";
+    constexpr const char ThemePreviewCachePath[] = "sdmc:/glassnx/cache/preview";
+    constexpr const char ActiveThemeCachePath[] = "sdmc:/glassnx/cache/active";
 
-    constexpr const char ManagerLanguagesPath[] = "sdmc:/ulaunch/lang/uManager";
+    constexpr const char ManagerLanguagesPath[] = "sdmc:/glassnx/lang/uManager";
 
     constexpr const char HbmenuPath[] = "sdmc:/hbmenu.nro";
-    constexpr const char ManagerPath[] = "sdmc:/switch/uManager.nro";
+    constexpr const char ManagerPath[] = "sdmc:/switch/GlassNXManager.nro";
     constexpr const char RootHomebrewPath[] = "sdmc:/switch";
 
     constexpr const char *ImageFormatList[] = {
@@ -44,17 +44,17 @@ namespace ul {
 
     //////////////////////
 
-    constexpr const char PreV100MenuPath[] = "sdmc:/ulaunch/entries";
-    constexpr const char PreV100ApplicationCachePath[] = "sdmc:/ulaunch/titles";
-    constexpr const char PreV100HomebrewCachePath[] = "sdmc:/ulaunch/nro";
-    constexpr const char PreV100AccountCachePath[] = "sdmc:/ulaunch/user";
+    constexpr const char PreV100MenuPath[] = "sdmc:/glassnx/entries";
+    constexpr const char PreV100ApplicationCachePath[] = "sdmc:/glassnx/titles";
+    constexpr const char PreV100HomebrewCachePath[] = "sdmc:/glassnx/nro";
+    constexpr const char PreV100AccountCachePath[] = "sdmc:/glassnx/user";
 
-    constexpr const char V100_V110MenuPath[] = "sdmc:/ulaunch/menu";
+    constexpr const char V100_V110MenuPath[] = "sdmc:/glassnx/menu";
 
-    constexpr const char PreV120AccountCachePath[] = "sdmc:/ulaunch/cache/acc";
-    constexpr const char PreV120ApplicationCachePath[] = "sdmc:/ulaunch/cache/app";
+    constexpr const char PreV120AccountCachePath[] = "sdmc:/glassnx/cache/acc";
+    constexpr const char PreV120ApplicationCachePath[] = "sdmc:/glassnx/cache/app";
 
-    constexpr const char PreV120ConfigPath[] = "sdmc:/ulaunch/config.cfg";
+    constexpr const char PreV120ConfigPath[] = "sdmc:/glassnx/config.cfg";
 
     //////////////////////
 

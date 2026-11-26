@@ -45,7 +45,7 @@ namespace ul::menu::ui {
 
     namespace {
         const char *PrefsPath() {
-            return g_GlobalSettings.ams_is_emummc?"sdmc:/ulaunch/glassnx-emu.prefs":"sdmc:/ulaunch/glassnx-sys.prefs";
+            return g_GlobalSettings.ams_is_emummc?"sdmc:/glassnx/glassnx-emu.prefs":"sdmc:/glassnx/glassnx-sys.prefs";
         }
         std::string Fold(std::string v) {
             for(auto &c:v)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -126,7 +126,7 @@ namespace ul::menu::ui {
         if(banner_checked && banner_id==id)return banner;
         banner_checked=true;banner_id=id;banner.reset();
         char name[120]={};
-        snprintf(name,sizeof(name),"sdmc:/ulaunch/glassnx/art/%016llx.jpg",static_cast<unsigned long long>(id));
+        snprintf(name,sizeof(name),"sdmc:/glassnx/art/%016llx.jpg",static_cast<unsigned long long>(id));
         auto fp=fopen(name,"rb");if(!fp)return {};
         const bool seek_ok=fseek(fp,0,SEEK_END)==0;
         const long length=seek_ok?ftell(fp):-1;fclose(fp);

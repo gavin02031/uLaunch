@@ -5,13 +5,13 @@
 namespace ul::man {
 
     constexpr const char ActiveSystemPath[] = "sdmc:/atmosphere/contents/0100000000001000";
-    constexpr const char BaseSystemPath[] = "sdmc:/ulaunch/bin/uSystem";
+    constexpr const char BaseSystemPath[] = "sdmc:/glassnx/bin/uSystem";
 
     bool IsBasePresent();
     bool IsSystemActive();
 
-    void ActivateSystem();
-    void DeactivateSystem();
+    bool ActivateSystem();
+    bool DeactivateSystem();
 
     struct Version {
         u32 major;
