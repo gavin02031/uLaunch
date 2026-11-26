@@ -239,6 +239,7 @@ namespace ul::menu::ui {
                                 g_MenuApplication->FadeOutToNonLibraryApplet();
                                 const auto rc = smi::LaunchApplication(cur_entry.app_info.app_id);
                                 if(R_SUCCEEDED(rc)) {
+                                    if(this->glass_shell)this->glass_shell->RecordLaunch(cur_entry.app_info.app_id);
                                     g_MenuApplication->Finalize();
                                     return;
                                 }

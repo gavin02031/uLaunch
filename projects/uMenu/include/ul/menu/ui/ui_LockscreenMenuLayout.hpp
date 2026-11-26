@@ -9,6 +9,8 @@ namespace ul::menu::ui {
             pu::ui::elm::TextBlock::Ref info_text;
             pu::ui::elm::TextBlock::Ref notification_text;
             pu::ui::elm::TextBlock::Ref notification_heading;
+            pu::ui::elm::TextBlock::Ref older_notification;
+            pu::ui::elm::Image::Ref older_panel;
             pu::ui::elm::Image::Ref connection_top_icon;
             MultiTextBlock::Ref time_mtext;
             pu::ui::elm::TextBlock::Ref date_text;

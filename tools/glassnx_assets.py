@@ -98,6 +98,7 @@ def main(root):
     png(root/"Background.png", wallpaper)
     png(root/"GlassNX"/"Lockscreen.png",landscape,(1920,1080))
     png(root/"GlassNX"/"Unlock.png",glass,(640,140))
+    png(root/"GlassNX"/"Alert.png",glass,(1200,108))
     for name in ("Default","Application","Folder","Homebrew"):
         png(root/"Main"/"TopMenuBackground"/(name+".png"),glass)
     for name in ("Main/InputBarBackground.png","Settings/InputBarBackground.png"):

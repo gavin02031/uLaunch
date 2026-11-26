@@ -27,3 +27,9 @@ Cached half-resolution textured glass bevels and reflective edges replace flat c
 - Search via X and Switch keyboard, favorites via left-stick click, A-Z sort via touch, appearance previews, theme selection via X on Settings, saved transparency/blur/motion. Favorites and preferences are separate for sysMMC/emuMMC, shared across users in each environment.
 - Persistent 24-item notification history, top-right toasts, illustrated twilight lock wallpaper and custom `/ulaunch/glassnx/lockscreen.jpg` override. Page transition is a time-based fade, not spring physics.
 - All six pages are still a development implementation; no device screenshot or successful Switch compile yet. Full live GPU refraction, exact hero artwork, advanced categories, fan/overclock settings and 60fps measurement remain outstanding.
+
+## v0.4 — original concept alignment
+- Six-column/two-row library shelves, actual recent title launch records, dedicated All/Favorites/Collections/Recently Played and Apps/Homebrew/Tools/Media tabs. Recent list records successful upstream launch requests, not measured playtime.
+- Native vector-like line icons, floating icon navigation, grouped quick toggles, vertical brightness/volume, session-only quiet notifications (low battery still shown), explicit unavailable performance/fan readouts. No fake or unsafe overclock profiles.
+- Settings sidebar matches the original category structure; system/network/storage links open the upstream settings page, not dedicated new subpages. Lock screen shows two actual history alerts and uses generated glass card assets.
+- CI dependency repair replaces system pip install with distro python3-requests. Full hardware verification and true dynamic refraction remain pending.

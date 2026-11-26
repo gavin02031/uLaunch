@@ -22,6 +22,11 @@ namespace ul::menu::ui {
         bool sort_name = false;
         std::string search;
         std::vector<u64> favorites;
+        std::vector<u64> recent;
+        void Glyph(Renderer &r,const std::string &kind,int x,int y,int size);
+        void IconButton(Renderer &r,int x,int y,int w,int h,const std::string &kind,const std::string &label,bool selected,std::function<void()> cb);
+        void ReadRecent();
+        void SaveRecent();
         std::vector<u8> backdrop;
         std::chrono::steady_clock::time_point transition{};
         pu::sdl2::TextureHandle::Ref banner;
@@ -69,6 +74,7 @@ namespace ul::menu::ui {
         s32 GetY() override {return 0;}
         s32 GetWidth() override {return 1920;}
         s32 GetHeight() override {return 1080;}
+        void RecordLaunch(u64 id);
         void Invalidate() {focus=0;offset=0;texts.clear();hits.clear();banner.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;

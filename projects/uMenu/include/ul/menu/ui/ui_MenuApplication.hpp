@@ -39,6 +39,7 @@ namespace ul::menu::ui {
             pu::ui::extras::Toast::Ref notif_toast;
             std::vector<std::string> glassnx_notifications;
             bool glassnx_low_battery_notified = false;
+            bool glassnx_quiet = false;
             bool launch_failed;
             Result pending_gc_mount_rc;
             bool needs_app_records_reload;
@@ -220,6 +221,8 @@ namespace ul::menu::ui {
 
             void ShowNotification(const std::string &text, const u64 timeout = 3000);
             void ShowNotificationHistory();
+            bool IsQuietMode() const {return glassnx_quiet;}
+            void SetQuietMode(bool quiet) {glassnx_quiet=quiet;}
             const std::vector<std::string> &GetNotificationHistory() const { return this->glassnx_notifications; }
             void CheckBatteryNotification(const u32 percent, const bool charging);
 

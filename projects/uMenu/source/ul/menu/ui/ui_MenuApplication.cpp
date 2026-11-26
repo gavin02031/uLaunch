@@ -328,6 +328,7 @@ namespace ul::menu::ui {
             this->glassnx_notifications.push_back(text.substr(0,2048));
             WriteHistory(this->glassnx_notifications);
         }
+        if(glassnx_quiet && text.rfind("Low battery:",0)!=0)return;
         this->EndOverlay();
         this->notif_toast->SetText(text);
         this->notif_toast->SetX(1920-this->notif_toast->GetWidth()-46);

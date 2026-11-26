@@ -45,17 +45,31 @@ namespace ul::menu::ui {
         for(auto &part : this->time_mtext->GetAll()) part->SetFont(pu::ui::MakeDefaultFontName(112));
         this->time_mtext->UpdatePositionsSizes();
 
-        this->notification_heading = pu::ui::elm::TextBlock::New(0, 594, "Notifications");
+        auto panel=TryFindLoadImage("ui/GlassNX/Alert");
+        if(panel) {
+            auto tex=pu::sdl2::TextureHandle::New(panel);
+            this->Add(pu::ui::elm::Image::New(360,520,tex));
+            this->older_panel=pu::ui::elm::Image::New(360,640,tex);
+            this->older_panel->SetVisible(false);this->Add(this->older_panel);
+        }
+        this->notification_heading = pu::ui::elm::TextBlock::New(0, 534, "Notifications");
         this->notification_heading->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
         this->notification_heading->SetColor({255,255,255,255});
         this->notification_heading->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
         this->Add(this->notification_heading);
-        this->notification_text = pu::ui::elm::TextBlock::New(0, 650, "You're all caught up.");
+        this->notification_text = pu::ui::elm::TextBlock::New(0, 576, "You're all caught up.");
         this->notification_text->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
         this->notification_text->SetColor({255,255,255,255});
         this->notification_text->SetClampWidth(1100);
         this->notification_text->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
         this->Add(this->notification_text);
+        this->older_notification=pu::ui::elm::TextBlock::New(0,676," ");
+        this->older_notification->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
+        this->older_notification->SetColor({255,255,255,255});
+        this->older_notification->SetClampWidth(1100);
+        this->older_notification->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
+        this->older_notification->SetVisible(false);
+        this->Add(this->older_notification);
 
         this->date_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         this->date_text->SetColor(g_MenuApplication->GetTextColor());
@@ -80,7 +94,11 @@ namespace ul::menu::ui {
         const auto &history = g_MenuApplication->GetNotificationHistory();
         const auto message = history.empty() ? std::string("You're all caught up.") : history.back();
         if(this->notification_text->GetText() != message) this->notification_text->SetText(message);
-        if((keys_down & HidNpadButton_A) || touch_pos.HitsRegion(640, 750, 640, 160)) {
+        const bool has_older=history.size()>1;
+        if(this->older_panel)this->older_panel->SetVisible(has_older);
+        this->older_notification->SetVisible(has_older);
+        if(has_older && this->older_notification->GetText()!=history[history.size()-2])this->older_notification->SetText(history[history.size()-2]);
+        if((keys_down & HidNpadButton_A) || touch_pos.HitsRegion(640, 790, 640, 140)) {
             UnlockScreen();
             return;
         }
