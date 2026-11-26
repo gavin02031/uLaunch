@@ -42,7 +42,7 @@ namespace ul::menu::ui {
         }
     }
     GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old,std::function<void()> back,std::function<void()> close)
-        :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();}
+        :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();}
 
     float GlassShell::StepSpring(float value,float &velocity,float target,float dt) {
         // Critically damped analytic spring; independent of frame rate.
@@ -85,6 +85,47 @@ namespace ul::menu::ui {
             for(auto &c:v)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             return v;
         }
+    }
+    void GlassShell::LoadCategories() {
+        const auto path=std::string(PrefsPath())+".categories";
+        auto fp=fopen(path.c_str(),"rb");if(!fp)return;
+        unsigned long long id=0;int category=0;
+        for(unsigned n=0;n<1024 && fscanf(fp,"%llx %d",&id,&category)==2;n++)
+            if(id && (category==1||category==2))title_categories[static_cast<u64>(id)]=category;
+        fclose(fp);
+    }
+    bool GlassShell::SaveCategories() {
+        const auto path=std::string(PrefsPath())+".categories",temp=path+".tmp";
+        auto fp=fopen(temp.c_str(),"wb");if(!fp)return false;
+        bool ok=true;
+        for(const auto &p:title_categories)
+            if(fprintf(fp,"%016llx %d\n",static_cast<unsigned long long>(p.first),p.second)<0)ok=false;
+        if(fclose(fp)!=0)ok=false;
+        if(ok && rename(temp.c_str(),path.c_str())==0)return true;
+        remove(temp.c_str());return false;
+    }
+    void GlassShell::TitleOptions() {
+        auto list=List();
+        if(focus<0||focus>=static_cast<int>(list.size()))return;
+        auto &e=entries->GetEntries()[list[focus]];
+        if(!e.Is<EntryType::Application>()){
+            g_MenuApplication->ShowNotification("Title categories apply to installed applications.");return;
+        }
+        const auto id=e.app_info.app_id;
+        char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(id));
+        const std::string detail=std::string("Title ID: ")+hex+"\nUse Game or App to organize your library.";
+        const auto choice=g_MenuApplication->DisplayDialog(EntryName(e),detail,{"Game","App","Automatic","Cancel"},true);
+        if(choice<0||choice>2)return;
+        const auto old=title_categories;
+        if(choice==2)title_categories.erase(id);
+        else {
+            if(title_categories.size()>=1024 && !title_categories.count(id))return;
+            title_categories[id]=choice==0?1:2;
+        }
+        if(!SaveCategories()){
+            title_categories=old;g_MenuApplication->ShowNotification("Could not save title category");return;
+        }
+        focus=offset=0;g_MenuApplication->ShowNotification("Library category saved");
     }
     void GlassShell::ReadRecent() {
         const std::string path=std::string(PrefsPath())+".recent";
@@ -210,9 +251,13 @@ namespace ul::menu::ui {
             // Installed forwarders can be reported as applications by Horizon.
             // Keep known utilities out of the game shelf; never hide unknown titles.
             const auto name=Fold(EntryName(e));
-            const bool utility=e.Is<EntryType::Application>() &&
+            bool utility=e.Is<EntryType::Application>() &&
                 (name=="sphaira" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
                  name=="youtube tv" || name=="youtube" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
+            if(e.Is<EntryType::Application>()) {
+                const auto it=title_categories.find(e.app_info.app_id);
+                if(it!=title_categories.end())utility=it->second==2;
+            }
             const bool game=e.Is<EntryType::Application>()&&!utility;
             if(page==Page::Apps) {
                 if((filter==0 && (e.Is<EntryType::Homebrew>()||e.IsSpecial()||utility)) ||
@@ -534,7 +579,7 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});break;
                     case 7:
-                        row("GlassNX","Version 0.7",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.8",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Recovery","Legacy interface",legacy);break;
                 }
@@ -623,6 +668,7 @@ namespace ul::menu::ui {
             if(page==Page::Settings){Section((setting_section+1)%8);return;}
             if(page==Page::Library || page==Page::Apps){filter=(filter+1)%4;focus=0;offset=0;}return;
         }
+        if((page==Page::Home||page==Page::Library||page==Page::Apps) && (down&HidNpadButton_StickR)){TitleOptions();return;}
         if(down&HidNpadButton_X) {
             if(page==Page::Home && g_GlobalSettings.IsSuspended()){close_suspended();return;}
             if(page==Page::Library||page==Page::Apps){Search();return;}
@@ -640,6 +686,27 @@ namespace ul::menu::ui {
         else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))Move(page==Page::Library||page==Page::Apps?6:1);
         else if(down&HidNpadButton_A)Activate();
     }
+    void GlassShell::HeroShade(int x,int y,int w,int h) {
+        auto rr=pu::ui::render::GetMainRenderer();
+        const float l=float(x),m=l+w*.67f,right=l+w,top=float(y),bottom=top+h;
+        const SDL_Color solid{14,18,40,230},mid{14,18,40,190},clear{14,18,40,8};
+        const SDL_Vertex v[]={{{l,top},solid,{0,0}},{{m,top},mid,{0,0}},{{right,top},clear,{0,0}},
+                              {{l,bottom},solid,{0,0}},{{m,bottom},mid,{0,0}},{{right,bottom},clear,{0,0}}};
+        const int inds[]={0,1,3,1,4,3,1,2,4,2,5,4};
+        SDL_BlendMode old=SDL_BLENDMODE_NONE;
+        SDL_GetRenderDrawBlendMode(rr,&old);
+        SDL_SetRenderDrawBlendMode(rr,SDL_BLENDMODE_BLEND);
+        SDL_RenderGeometry(rr,nullptr,v,6,inds,12);
+        SDL_SetRenderDrawBlendMode(rr,old);
+    }
+    void GlassShell::BatteryGlyph(Renderer &r,int x,int y,int size) {
+        const auto pct=std::clamp(int(os::GetBatteryLevel()),0,100);
+        const int width=size*4/5,height=size/2;
+        r->RenderRoundedRectangle({240,245,255,200},x,y+size/4,width,height,5);
+        r->RenderRectangleFill({240,245,255,200},x+width+2,y+size*3/8,3,size/4);
+        const int fill=(width-8)*pct/100;
+        if(fill>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245},x+4,y+size/4+4,fill,height-8,std::min(4,fill/2));
+    }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;UpdateMotion();
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
@@ -647,6 +714,7 @@ namespace ul::menu::ui {
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,34,45);
+        hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
         const char *navicons[]={"home","games","apps","settings"};
@@ -658,7 +726,8 @@ namespace ul::menu::ui {
         if(g_GlobalSettings.wireless_lan_enabled)Glyph(r,"wifi",1600,40,34);
         else Label(r,"Offline",1580,43,27);
         Label(r,Battery(),1690,43,30);
-        Glyph(r,"battery",1805,40,38);
+        BatteryGlyph(r,1805,40,38);
+        hits.push_back({1470,25,380,80,[this](){SetPage(Page::Control);}});
 
         if(page==Page::Home) {
             auto list=List();
@@ -681,14 +750,24 @@ namespace ul::menu::ui {
                 auto icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
                 if(wide) {
                     RoundedArt(r,wide,85,155,1130,405,32);
-                    r->RenderRoundedRectangleFill({20,22,49,155},90,165,710,385,28);
+                    HeroShade(105,175,1090,365);
                 } else if(icon) {
+                    // Installed icon as artwork-derived backdrop, not invented wide banner.
+                    auto tex=icon->Get();
+                    if(tex) {
+                        Uint8 rr=255,gg=255,bb=255;
+                        SDL_GetTextureColorMod(tex,&rr,&gg,&bb);
+                        SDL_SetTextureColorMod(tex,102,108,146);
+                        Cover(r,icon,105,175,1090,365);
+                        SDL_SetTextureColorMod(tex,rr,gg,bb);
+                        HeroShade(105,175,1090,365);
+                    }
                     RoundedArt(r,icon,805,165,390,390,34);
                 }
                 Label(r,suspended?"CONTINUE PLAYING":"FEATURED GAME",112,185,30);
                 Label(r,EntryName(e),112,260,64,680);
                 Label(r,suspended?"Currently suspended":"Ready to play",112,362,30,680);
-                Button(r,112,445,250,78,suspended?"Resume":"Play",false,[this,idx](){launch(idx);});
+                Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
                 if(suspended)Button(r,385,445,220,78,"Close game",false,close_suspended);
                 else if(e.Is<EntryType::Application>() && Favorite(e.app_info.app_id))Label(r,"Favorite",405,466,27);
             } else {
@@ -697,12 +776,18 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
+            Label(r,"R Stick  Options",370,606,27,330);
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close suspended game",1110,606,27,500);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
             for(int i=0;i<std::min(9,int((list.size()+4)/5));++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960+i*18,938,4);
             Card(r,392,954,1136,87);
             Segment(r,404,960,215,74,"bell","Alerts",false,[this](){SetPage(Page::Notifications);});
+            const auto alert_count=g_MenuApplication->GetNotificationHistory().size();
+            if(alert_count>0){
+                r->RenderCircleFill({125,146,218,255},602,964,18);
+                Label(r,std::to_string(alert_count),602,945,27,0,true);
+            }
             Segment(r,628,960,210,74,"sun","Control",false,[this](){SetPage(Page::Control);});
             Segment(r,847,960,210,74,"album","Album",false,[](){ShowAlbum();});
             Segment(r,1066,960,210,74,"settings","Settings",false,[this](){SetPage(Page::Settings);});
@@ -725,7 +810,7 @@ namespace ul::menu::ui {
                 Button(r,775,700,370,75,"Clear filters",true,[this](){search.clear();filter=0;focus=offset=0;});
             }
             for(int i=0;i<12&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],88+(i%6)*293,389+(i/6)*280,275,270,focus==offset+i);
-            Label(r,games?"L/R Pages   Y Filter   X Search   L Stick Favorite   A Open":"L/R Pages   Y Filter   X Search   A Open",70,1005,27,1580);
+            Label(r,games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Options   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
             if(list.size()>12)Label(r,std::to_string(offset/12+1)+"/"+std::to_string((list.size()+11)/12),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;

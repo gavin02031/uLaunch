@@ -40,6 +40,12 @@ namespace ul::menu::ui {
         std::string search;
         std::vector<u64> favorites;
         std::vector<u64> recent;
+        std::map<u64,int> title_categories;
+        void LoadCategories();
+        bool SaveCategories();
+        void TitleOptions();
+        void HeroShade(int x,int y,int w,int h);
+        void BatteryGlyph(Renderer &r,int x,int y,int size);
         void Glyph(Renderer &r,const std::string &kind,int x,int y,int size);
         void IconButton(Renderer &r,int x,int y,int w,int h,const std::string &kind,const std::string &label,bool selected,std::function<void()> cb);
         void ReadRecent();

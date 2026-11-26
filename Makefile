@@ -6,7 +6,7 @@ export VERSION	:=	$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO)
 export UL_DEFS	:=	-DUL_MAJOR=$(VERSION_MAJOR) -DUL_MINOR=$(VERSION_MINOR) -DUL_MICRO=$(VERSION_MICRO) -DUL_VERSION=\"$(VERSION)\"
 
 OUT_DIR				:=	SdOut
-OUT_DIR_ZIP			:=	GlassNX-v0.7
+OUT_DIR_ZIP			:=	GlassNX-v0.8
 
 OUT_THEME_MUSIC		:=	default-theme-music-v$(VERSION).ultheme
 THEME_MUSIC_TEMP	:=	default-theme-music-tmp
