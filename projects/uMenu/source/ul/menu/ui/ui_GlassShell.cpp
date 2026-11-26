@@ -106,7 +106,7 @@ namespace ul::menu::ui {
         swkbdConfigMakePresetDefault(&cfg);
         swkbdConfigSetType(&cfg,SwkbdType_All);
         swkbdConfigSetGuideText(&cfg,"Search your library");
-        swkbdConfigSetInitialText(&cfg,search);
+        swkbdConfigSetInitialText(&cfg,search.c_str());
         char result[128]={};auto rc=ShowSwkbd(&cfg,result,sizeof(result));swkbdClose(&cfg);
         if(R_SUCCEEDED(rc)){search=result;focus=offset=0;}
     }
@@ -369,7 +369,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::Slider(Renderer &r,int x,int y,int w,int h,const std::string &name,float value,bool selected) {
         Card(r,x,y,w,h,selected);
-        Label(r,name,x+26,y+22,37);
+        Label(r,name,x+w/2,y+22,30,w-18,true);
         Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w/2,y+70,30,0,true);
         const int left=x+46,top=y+115,width=w-92,height=h-166;
         r->RenderRoundedRectangleFill({32,38,74,110},left,top,width,height,std::min(34,width/2));
