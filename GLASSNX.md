@@ -42,3 +42,5 @@ The first hardware screenshots showed excessive white rims, square artwork, util
 
 ## v0.7 — interaction polish
 Time-based critically damped springs animate the navigation selection and artwork focus; reduced motion disables both. Touch now selects an artwork tile first and opens on a second tap, and Control Center supports continuous drag with throttled service calls. B returns to the previous main tab from Control Center/Notifications, navigates out of a folder, or returns from a settings subcategory. X on HOME offers to close the suspended game, reusing upstream confirmation. Notification Center scrolls saved alerts and clears with confirmation. No new background services, clock manipulation or unverified performance claims. Native build and hardware QA remain required.
+
+Temporary overlays restore the previous main tab's focus, filter, search and settings category on dismissal.

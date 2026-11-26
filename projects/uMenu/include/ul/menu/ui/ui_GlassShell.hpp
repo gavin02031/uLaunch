@@ -22,6 +22,8 @@ namespace ul::menu::ui {
         void Back();
         Page page = Page::Home;
         Page previous = Page::Home;
+        int previous_focus=0,previous_offset=0,previous_filter=0,previous_section=0;
+        std::string previous_search;
         int focus = 0;
         int offset = 0;
         int theme = 0;

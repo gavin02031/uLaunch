@@ -69,7 +69,9 @@ namespace ul::menu::ui {
         alert_offset=std::clamp(alert_offset+amount,0,std::max(0,n-4));
     }
     void GlassShell::Back() {
-        if(page==Page::Control||page==Page::Notifications){SetPage(previous);return;}
+        if(page==Page::Control||page==Page::Notifications){
+            SetPage(previous);focus=previous_focus;offset=previous_offset;filter=previous_filter;setting_section=previous_section;search=previous_search;return;
+        }
         if(page==Page::Settings&&setting_section!=0){Section(0);return;}
         if((page==Page::Library||page==Page::Home||page==Page::Apps)&&!entries->IsInRoot()){folder_back();Invalidate();return;}
         SetPage(Page::Home);
@@ -192,7 +194,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::SetPage(Page p) {
         if(p==page) return;
-        if((p==Page::Control || p==Page::Notifications) && static_cast<int>(page)<4) previous=page;
+        if((p==Page::Control || p==Page::Notifications) && static_cast<int>(page)<4) {
+            previous=page;previous_focus=focus;previous_offset=offset;previous_filter=filter;previous_section=setting_section;previous_search=search;
+        }
         if(p==Page::Settings)setting_section=0;
         page=p; focus=0;offset=0;filter=0;alert_offset=0;animated_focus=-1;search.clear();hits.clear();transition=std::chrono::steady_clock::now();
     }
