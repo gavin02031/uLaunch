@@ -17,7 +17,7 @@ namespace ul::menu::ui {
         std::string GetMenuName(const SettingMenu menu) {
             switch(menu) {
                 case SettingMenu::System: return GetLanguageString("set_menu_system");
-                case SettingMenu::uLaunch: return GetLanguageString("set_menu_ulaunch");
+                case SettingMenu::uLaunch: return "GlassNX";
                 case SettingMenu::Bluetooth: return GetLanguageString("set_menu_bluetooth");
                 case SettingMenu::Network: return GetLanguageString("set_menu_network");
                 case SettingMenu::Screen: return GetLanguageString("set_menu_screen");
@@ -888,9 +888,12 @@ namespace ul::menu::ui {
         this->setting_save_sfx = nullptr;
         this->back_sfx = nullptr;
 
-        auto brand=pu::ui::elm::TextBlock::New(70,48,"GlassNX  /  Advanced Settings");
-        brand->SetFont(pu::ui::MakeDefaultFontName(30));
+        auto brand=pu::ui::elm::TextBlock::New(70,45,"System settings");
+        brand->SetFont(pu::ui::MakeDefaultFontName(45));
         brand->SetColor({238,244,255,225});this->Add(brand);
+        this->Add(GlassSystemPanel::New(1600,30,250,90));
+        auto back=pu::ui::elm::TextBlock::New(1650,57,"B  Back");
+        back->SetFont(pu::ui::MakeDefaultFontName(30));back->SetColor({238,244,255,255});this->Add(back);
         this->Add(GlassSystemPanel::New(54,170,410,780));
         this->Add(GlassSystemPanel::New(484,170,1380,780));
         auto caption=pu::ui::elm::TextBlock::New(84,208,"Categories");
@@ -902,7 +905,7 @@ namespace ul::menu::ui {
             t->SetFont(pu::ui::MakeDefaultFontName(37));
             t->SetColor({212,225,255,255});category_labels[i]=t;this->Add(t);
         }
-        auto hint=pu::ui::elm::TextBlock::New(86,881,"L / R  Switch category");
+        auto hint=pu::ui::elm::TextBlock::New(86,881,"L / R or tap category");
         hint->SetFont(pu::ui::MakeDefaultFontName(27));
         hint->SetColor({225,235,255,220});this->Add(hint);
         this->menu_text = pu::ui::elm::TextBlock::New(0, 0, "...");
@@ -951,6 +954,15 @@ namespace ul::menu::ui {
         UpdateScreenCaptureBackground(false);
 
         const auto is_in_submenu = this->cur_submenu != SettingSubmenu::None;
+        bool back_requested=(keys_down & HidNpadButton_B)!=0;
+        int touch_category=-1;
+        if(touch_pos.IsEmpty())sidebar_touch_latched=false;
+        else if(!sidebar_touch_latched){
+            sidebar_touch_latched=true;
+            if(touch_pos.HitsRegion(1600,30,250,90))back_requested=true;
+            else if(!is_in_submenu)for(int i=0;i<static_cast<int>(category_labels.size());++i)
+                if(touch_pos.HitsRegion(72,285+i*92,376,82)){touch_category=i;break;}
+        }
         const auto can_move_left = !is_in_submenu && (static_cast<u32>(this->cur_menu) > 0) && (this->settings_menu_temp_x_offset == 0);
         const auto can_move_right = !is_in_submenu && ((static_cast<u32>(this->cur_menu) + 1) < static_cast<u32>(SettingMenu::Count)) && (this->settings_menu_temp_x_offset == 0);
 
@@ -971,7 +983,7 @@ namespace ul::menu::ui {
             this->settings_menu_temp->SetX(this->base_menu_x + this->settings_menu_temp_x_offset);
         }
 
-        if(keys_down & HidNpadButton_B) {
+        if(back_requested) {
             pu::audio::PlaySfx(this->back_sfx);
 
             if(is_in_submenu) {
@@ -997,38 +1009,19 @@ namespace ul::menu::ui {
                 g_MenuApplication->LoadMenu(MenuType::Main);
             }
         }
-        else if((keys_down & HidNpadButton_L) || (keys_down & HidNpadButton_ZL) || (keys_down & HidNpadButton_Left)) {
-            if(can_move_left) {
+        else if(!is_in_submenu && this->settings_menu_temp_x_offset==0) {
+            int target=static_cast<int>(this->cur_menu);
+            if(touch_category>=0)target=touch_category;
+            else if(can_move_left&&(keys_down&(HidNpadButton_L|HidNpadButton_ZL|HidNpadButton_Left)))--target;
+            else if(can_move_right&&(keys_down&(HidNpadButton_R|HidNpadButton_ZR|HidNpadButton_Right)))++target;
+            if(target!=static_cast<int>(this->cur_menu)){
                 pu::audio::PlaySfx(this->setting_menu_move_sfx);
-
-                this->settings_menu_temp->SetVisible(true);
-                std::swap(this->settings_menu, this->settings_menu_temp);
-                
-                const auto old_menu = this->cur_menu;
-                this->cur_menu = static_cast<SettingMenu>(static_cast<u32>(this->cur_menu) - 1);
+                this->cur_menu=static_cast<SettingMenu>(target);
+                this->settings_menu->SetX(this->base_menu_x);
+                this->settings_menu_temp->SetVisible(false);
                 this->Reload(false);
-                this->cur_menu = old_menu;
-
-                this->settings_menu_temp_x_offset = 0;
-                this->move_goal_menu = static_cast<SettingMenu>(static_cast<u32>(this->cur_menu) - 1);
-                this->settings_menu_temp_x_offset_incr.StartFromZero(SettingsMenuTempXOffsetSteps, pu::ui::render::ScreenWidth);
-            }
-        }
-        else if((keys_down & HidNpadButton_R) || (keys_down & HidNpadButton_ZR) || (keys_down & HidNpadButton_Right)) {
-            if(can_move_right) {
-                pu::audio::PlaySfx(this->setting_menu_move_sfx);
-
-                this->settings_menu_temp->SetVisible(true);
-                std::swap(this->settings_menu, this->settings_menu_temp);
-
-                const auto old_menu = this->cur_menu;
-                this->cur_menu = static_cast<SettingMenu>(static_cast<u32>(this->cur_menu) + 1);
-                this->Reload(false);
-                this->cur_menu = old_menu;
-
-                this->settings_menu_temp_x_offset = 0;
-                this->move_goal_menu = static_cast<SettingMenu>(static_cast<u32>(this->cur_menu) + 1);
-                this->settings_menu_temp_x_offset_incr.StartFromZero(SettingsMenuTempXOffsetSteps, -pu::ui::render::ScreenWidth);
+                this->settings_menu->SetSelectedIndex(0);
+                this->inputs_changed=true;
             }
         }
 
@@ -1056,10 +1049,10 @@ namespace ul::menu::ui {
 
             this->input_bar->ClearInputs();
             this->input_bar->AddSetInput(HidNpadButton_A, GetLanguageString("input_settings_select"));
-            if(can_move_left) {
+            if(this->cur_submenu==SettingSubmenu::None&&static_cast<u32>(this->cur_menu)>0) {
                 this->input_bar->AddSetInput(HidNpadButton_L | HidNpadButton_ZL | InputBar::MetaDpadNpadButton, GetLanguageString("input_settings_left"));
             }
-            if(can_move_right) {
+            if(this->cur_submenu==SettingSubmenu::None&&static_cast<u32>(this->cur_menu)+1<static_cast<u32>(SettingMenu::Count)) {
                 this->input_bar->AddSetInput(HidNpadButton_R | HidNpadButton_ZR | InputBar::MetaDpadNpadButton, GetLanguageString("input_settings_right"));
             }
             this->input_bar->AddSetInput(HidNpadButton_B, GetLanguageString("input_settings_back"));
@@ -1093,7 +1086,12 @@ namespace ul::menu::ui {
             this->submenu_text->SetVisible(false);
         }
         this->menu_text->SetText(GetMenuName(this->cur_menu));
-        for(size_t i=0;i<category_labels.size();++i)category_labels[i]->SetColor(i==static_cast<size_t>(this->cur_menu)?pu::ui::Color{255,255,255,255}:pu::ui::Color{182,200,231,210});
+        const char *names[]={"System","GlassNX","Bluetooth","Network","Display","Developer"};
+        for(size_t i=0;i<category_labels.size();++i){
+            const bool active=i==static_cast<size_t>(this->cur_menu);
+            category_labels[i]->SetText(std::string(active?"•  ":"   ")+names[i]);
+            category_labels[i]->SetColor(active?pu::ui::Color{255,255,255,255}:pu::ui::Color{182,200,231,210});
+        }
 
         if(this->cur_submenu == SettingSubmenu::None) {
             if(soft) {
