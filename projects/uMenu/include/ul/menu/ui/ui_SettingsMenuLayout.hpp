@@ -83,6 +83,7 @@ namespace ul::menu::ui {
             SettingMenu move_goal_menu;
             InputBar::Ref input_bar;
             bool inputs_changed;
+            bool sidebar_touch_latched=true;
             pu::audio::Sfx setting_edit_sfx;
             pu::audio::Sfx setting_save_sfx;
             pu::audio::Sfx back_sfx;
@@ -100,6 +101,7 @@ namespace ul::menu::ui {
             void DisposeSfx() override;
 
             inline void Rewind() {
+                this->sidebar_touch_latched = true;
                 this->settings_menu_temp_x_offset = 0;
                 this->cur_menu = static_cast<SettingMenu>(0);
                 this->cur_submenu = SettingSubmenu::None;
