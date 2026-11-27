@@ -1260,7 +1260,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.21",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.22",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1387,6 +1387,20 @@ namespace ul::menu::ui {
             AdjustSlider(focus==0,(focus==0?brightness:volume)+delta);
             return;
         }
+        if(page==Page::Control){
+            // Focus follows the visible shortcut grid, not the underlying vector order.
+            // Sliders reserve Left/Right for value adjustment above.
+            constexpr int routes[10][4]={
+                {0,0,4,1},{1,1,0,9},{2,3,2,5},{2,4,3,6},{3,0,4,7},
+                {5,6,2,8},{5,7,3,8},{6,1,4,8},{8,9,6,8},{8,9,1,9}};
+            focus=std::clamp(focus,0,9);
+            if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft))focus=routes[focus][0];
+            else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight))focus=routes[focus][1];
+            else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp))focus=routes[focus][2];
+            else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))focus=routes[focus][3];
+            else if(down&HidNpadButton_A)Activate();
+            return;
+        }
         if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft))Move(-1);
         else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight))Move(1);
         else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp))Move(page==Page::Library?-5:page==Page::Apps?-6:-1);
@@ -1441,10 +1455,12 @@ namespace ul::menu::ui {
         Picture(r,ActiveWallpaper(),0,0,1920,1080);
         const auto scrim=WallpaperTint();if(scrim.a)r->RenderRectangleFill(scrim,0,0,1920,1080);
         if(gallery.active){RenderGallery(r);return;}
-        RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
-        Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.21 · SAFE":"v0.21",130,76,27);
-        hits.push_back({44,24,76,76,[](){ShowUserPage();}});
+        RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,37);
+        r->RenderCircle({228,238,255,135},82,62,39);
+        Label(r,"GlassNX",132,25,45,380);
+        const char *contexts[]={"Your space","Game collection","Apps & utilities","Personalize","Quick controls","Activity"};
+        Label(r,safe_mode?"SAFE MODE":contexts[static_cast<int>(page)],134,76,27,395);
+        hits.push_back({44,24,430,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
         const char *navicons[]={"home","games","apps","settings"};
@@ -1453,6 +1469,7 @@ namespace ul::menu::ui {
         r->RenderRoundedRectangle({218,229,255,155},pill,32,190,64,32);
         r->RenderRoundedRectangleFill({247,249,255,70},pill+25,34,140,3,1);
         for(int i=0;i<4;++i)Segment(r,565+i*198,32,190,64,navicons[i],tabs[i],false,[this,i](){SetPage(static_cast<Page>(i));});
+        ul::glassnx::DrawSurface(r,1460,25,390,78,35,{33,43,75,80});
         Label(r,Clock(),1480,43,30);
         if(g_GlobalSettings.wireless_lan_enabled)Glyph(r,"wifi",1600,40,34);
         else Label(r,"Offline",1580,43,27);
@@ -1470,13 +1487,18 @@ namespace ul::menu::ui {
             focus=std::clamp(focus,0,std::max(0,static_cast<int>(list.size())-1));offset=(focus/5)*5;
             Card(r,70,140,1160,435);
             Card(r,1260,140,590,205);Card(r,1260,365,590,210);
-            Glyph(r,"battery",1298,167,32);Label(r,"Battery & device",1345,166,30);
+            Glyph(r,"battery",1298,167,32);Label(r,"Device glance",1345,166,30);
             hits.push_back({1260,140,590,205,[this](){SetPage(Page::Control);}});
             hits.push_back({1260,365,590,210,[this](){SetPage(Page::Settings);Section(5);}});
             Label(r,Battery(),1300,214,64);
             const auto pct=std::clamp(int(os::GetBatteryLevel()),0,100);
             r->RenderRoundedRectangleFill({25,32,70,130},1300,302,500,12,6);
-            if(pct>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{245,131,150,230}:pu::ui::Color{165,224,207,230},1300,302,5*pct,12,6);
+            if(pct>0){
+                const auto color=pct<=15?pu::ui::Color{245,131,150,230}:pu::ui::Color{165,224,207,230};
+                const int width=5*pct,radius=std::min(5,width/2-1);
+                if(radius>0)r->RenderRoundedRectangleFill(color,1300,302,width,12,radius);
+                else r->RenderRectangleFill(color,1300,302,width,12);
+            }
             Label(r,temperature<0?"Temp unavailable":std::to_string(temperature)+" C",1530,241,30,275);
             Glyph(r,"storage",1298,392,32);Label(r,"Storage",1345,391,30);
             Label(r,StorageText(),1300,446,45,500);
@@ -1514,7 +1536,7 @@ namespace ul::menu::ui {
                 if(suspended){
                     r->RenderRoundedRectangleFill({94,156,139,205},122,320,14,14,9);
                     Label(r,"CONTINUE PLAYING",150,310,27,570);
-                }else Label(r,"FEATURED GAME",122,310,27);
+                }else Label(r,"READY TO PLAY",122,310,27);
                 Label(r,EntryName(e),122,350,45,610);
                 Label(r,suspended?"Suspended":(e.Is<EntryType::Application>() && std::find(recent.begin(),recent.end(),e.app_info.app_id)!=recent.end()?"Recently played":"Ready to play"),122,410,27,610);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
@@ -1525,17 +1547,21 @@ namespace ul::menu::ui {
                 } else Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
             } else {
                 Label(r,"Your home awaits",112,245,64);
-                Label(r,"Add or organize entries in the legacy menu.",112,355,30);
+                Label(r,"Add games and organize your collection.",112,355,30);
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
-            Label(r,"Your games",75,600,37);
+            Label(r,"Game shelf",75,600,37);
             Label(r,dock_focus>=0?"A Open  ·  Up / B Back":"R Stick Options   ·   Down Dock",385,606,27,570);
             IconButton(r,1000,590,240,52,"search","Y Search",false,[this](){dock_focus=-1;Search();});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,250,dock_focus<0&&focus==offset+i);
-            const int dots=std::min(9,int((list.size()+4)/5));
-            for(int i=0;i<dots;++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960-(dots-1)*9+i*18,909,4);
+            const int pages=int((list.size()+4)/5);
+            if(pages>9){
+                const int track=160,thumb=std::max(12,track/pages);
+                r->RenderRoundedRectangleFill({227,235,255,65},880,906,track,6,2);
+                r->RenderRoundedRectangleFill({227,235,255,230},880+(track-thumb)*(offset/5)/(pages-1),906,thumb,6,2);
+            }else for(int i=0;i<pages;++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960-(pages-1)*9+i*18,909,4);
             RenderDock(r);
         } else if(page==Page::Library || page==Page::Apps) {
             const bool games=page==Page::Library;
@@ -1574,7 +1600,7 @@ namespace ul::menu::ui {
             if(static_cast<int>(list.size())>capacity)Label(r,std::to_string(offset/capacity+1)+"/"+std::to_string((list.size()+capacity-1)/capacity),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
-            Label(r,settings?"Settings":control?"Control Center":"Notifications",70,137,64);
+            Label(r,settings?"Settings":control?"Quick controls":"Activity",70,137,64);
             if(!settings&&!control){
                 const bool quiet=g_MenuApplication->IsQuietMode();
                 IconButton(r,1420,140,400,76,"moon",quiet?"Quiet on":"Quiet off",quiet,[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());});
@@ -1602,12 +1628,13 @@ namespace ul::menu::ui {
                 } else Card(r,450,280,1390,670);
             } else if(control) {
                 Card(r,70,225,695,505);Card(r,1310,255,510,355);
-                Label(r,"Connectivity & quick actions",100,235,27,635);
-                r->RenderRoundedRectangleFill({245,245,255,145},890,117,140,9,4);
-                Glyph(r,"clock",1340,281,42);Label(r,"Performance",1398,280,37);
-                Label(r,"Stock mode",1340,351,45);
-                Label(r,"No overclock applied",1340,422,30);
-                Label(r,"Clock profiles unavailable",1340,490,27);
+                Label(r,"Connections & shortcuts",100,235,27,635);
+                Label(r,"Display & sound",790,212,27,490);
+                Glyph(r,"games",1340,281,42);Label(r,"System state",1398,280,37,390);
+                const bool suspended=g_GlobalSettings.IsSuspended();
+                Label(r,suspended?"Game suspended":"Home active",1340,351,45,455);
+                Label(r,safe_mode?"Safe rendering":suspended?"Conservative rendering":enhanced_glass?"Enhanced glass (experimental)":"Standard Prism rendering",1340,422,30,455);
+                Label(r,"Clocks not managed by GlassNX",1340,490,27,455);
                 Card(r,780,770,500,175);Label(r,"Battery",810,790,30);Label(r,Battery(),810,842,64);
                 Card(r,1310,770,510,175);Label(r,"Temperature",1340,790,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",1340,842,45);
                 Label(r,"Fan: unavailable",1340,909,27);
@@ -1647,13 +1674,13 @@ namespace ul::menu::ui {
                     const bool on=(i==2&&g_GlobalSettings.wireless_lan_enabled)||(i==3&&g_GlobalSettings.bluetooth_enabled)||(i==6&&g_MenuApplication->IsQuietMode());
                     Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
                     const auto accent=i==2?pu::ui::Color{91,174,242,225}:i==3?pu::ui::Color{128,145,242,225}:pu::ui::Color{170,138,228,225};
-                    r->RenderCircleFill(on?accent:pu::ui::Color{45,58,99,150},c.x+c.w/2,c.y+65,46);
-                    r->RenderCircle({235,244,255,150},c.x+c.w/2,c.y+65,46);
-                    r->RenderCircle({247,250,255,65},c.x+c.w/2,c.y+65,41);
+                    const int ix=c.x+c.w/2-46,iy=c.y+19;
+                    ul::glassnx::DrawSurface(r,ix,iy,92,92,30,on?accent:pu::ui::Color{45,58,99,150},focus==static_cast<int>(i));
+                    if(on)r->RenderCircleFill({225,250,239,235},ix+80,iy+12,6);
                     Glyph(r,icons[i-2],c.x+c.w/2-26,c.y+39,52);
                     Label(r,c.label,c.x+c.w/2,c.y+117,27,c.w-14,true);
-                    Label(r,c.detail,c.x+c.w/2,c.y+148,27,c.w-14,true);
-                    hits.push_back({c.x,c.y,c.w,c.h,c.action});continue;
+                    if(!c.detail.empty())Label(r,c.detail,c.x+c.w/2,c.y+148,27,c.w-14,true);
+                    hits.push_back({c.x,c.y,c.w,c.h,[this,i,action=c.action](){focus=static_cast<int>(i);action();}});continue;
                 }
                 if(settings) {
                     const bool selected=focus==static_cast<int>(i);
@@ -1673,9 +1700,9 @@ namespace ul::menu::ui {
                     r->RenderRoundedRectangleFill(motion?pu::ui::Color{99,161,238,255}:pu::ui::Color{70,77,120,255},c.x+c.w-180,c.y+22,125,48,24);
                     r->RenderCircleFill({255,255,255,255},c.x+c.w-(motion?81:156),c.y+46,21);
                 }
-                hits.push_back({c.x,c.y,c.w,c.h,c.action});
+                hits.push_back({c.x,c.y,c.w,c.h,[this,i,action=c.action](){focus=static_cast<int>(i);action();}});
             }
-            Label(r,"A  Select     B  Home     ZL/ZR  Control     +  Notifications",70,1005,30);
+            Label(r,control?"A Select   Left / Right Adjust slider   Up / Down Navigate   B Back":"A Select   B Back   ZL/ZR Quick controls   + Activity",70,1005,27,1770);
         }
         if(close_sheet){RenderCloseSheet(r);return;}
         if(keyboard_open){RenderKeyboard(r);return;}
