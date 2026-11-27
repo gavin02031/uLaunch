@@ -18,6 +18,7 @@ namespace ul::menu::ui {
             std::vector<pu::sdl2::TextureHandle::Ref> loaded_theme_icons;
             pu::audio::Sfx theme_change_sfx;
             pu::audio::Sfx back_sfx;
+            bool header_touch_latched=true;
 
             void theme_DefaultKey();
 
