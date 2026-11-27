@@ -67,3 +67,6 @@ Hide the legacy screen-capture layer whenever GlassNX HOME is visible. Close rel
 
 ### Unified component identity
 Core (uSystem) and Launch Runtime (uLoader) are headless and log the shared GlassNX brand/version. Keep executable paths, protocol version, NPDM permissions, and legacy log filenames stable for safe manual upgrades and recovery. Manager has a new glass-styled recovery dashboard, with its original guarded action handlers and no GPU target effects. Home adds a title export in Settings > Homebrew and an integrations info entry. Export is limited to the current folder. Discord is not connected yet; do not install another background sysmodule until the crash regression is tested.
+
+### Optional integrations
+The manual v0.12 package includes glassnx/desktop-tools/glassnx_artwork.py and a setup guide. The PC importer queries SteamGridDB using a user-provided API key, asks for game/art selection, bounds download and decoded dimensions and writes a 1280x720-or-smaller JPEG. Live API requests are untested. Discord presence is documented but not implemented; no extra sysmodule is installed. Existing launcher process remains offline with respect to these integrations.
