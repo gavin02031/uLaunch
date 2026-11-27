@@ -37,13 +37,14 @@ jobs:
         test -s SdOut/switch/GlassNXManager.nro
         cmp SdOut/glassnx/bin/uSystem/exefs.nsp SdOut/atmosphere/contents/0100000000001000/exefs.nsp
         grep -Fq '"/glassnx/bin/uMenu"' projects/uSystem/source/main.cpp
-        grep -aFq 'GlassNX v0.9' projects/uMenu/uMenu.elf
-        printf 'GlassNX v0.9\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
-        (cd SdOut && zip -r ../GlassNX-v0.9.zip atmosphere glassnx switch)
-        unzip -t GlassNX-v0.9.zip
+        grep -aFq 'GlassNX v0.10' projects/uMenu/uMenu.elf
+        printf 'GlassNX v0.10\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
+        (cd SdOut && zip -r ../GlassNX-v0.10.zip atmosphere glassnx switch)
+        unzip -t GlassNX-v0.10.zip
+        python3 tools/check_glassnx_package.py GlassNX-v0.10.zip
         
     - uses: actions/upload-artifact@master
       with:
-        name: GlassNX-v0.9
-        path: GlassNX-v0.9.zip
+        name: GlassNX-v0.10
+        path: GlassNX-v0.10.zip
         if-no-files-found: error

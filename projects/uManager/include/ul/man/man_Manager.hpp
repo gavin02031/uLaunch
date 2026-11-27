@@ -12,6 +12,9 @@ namespace ul::man {
 
     bool ActivateSystem();
     bool DeactivateSystem();
+    bool InstallGlassUpdate(std::string &message);
+    bool RestoreGlassUpdate(std::string &message);
+    bool GlassUpdatePending();
 
     struct Version {
         u32 major;

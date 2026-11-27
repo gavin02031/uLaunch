@@ -44,14 +44,11 @@ namespace ul::man::ui {
             spsmShutdown(true);
         }
 
-        inline void ShowUpdateError() {
-            g_MainApplication->CreateShowDialog(GetLanguageString("update_title"), GetLanguageString("update_error"), { GetLanguageString("ok") }, true);
-        }
 
     }
 
     void MainMenuLayout::ResetInfoText() {
-        std::string info = "GlassNX Manager v0.9";
+        std::string info = "GlassNX Manager v0.10";
         if(g_MainApplication->IsAvailable()) {
             const auto ver = g_MainApplication->GetVersion();
             info += " | HOME service version " + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);
@@ -92,9 +89,9 @@ namespace ul::man::ui {
         this->reset_cache_menu_item->AddOnKey(std::bind(&MainMenuLayout::resetCache_DefaultKey, this));
         this->options_menu->AddItem(this->reset_cache_menu_item);
         
-        this->update_menu_item = pu::ui::elm::MenuItem::New("About / updates");
+        this->update_menu_item = pu::ui::elm::MenuItem::New("Update / Recovery / Safe Mode");
         this->update_menu_item->SetColor(MenuItemColor);
-        this->update_menu_item->AddOnKey([](){g_MainApplication->CreateShowDialog("GlassNX v0.9","Updates: github.com/gavin02031/uLaunch/tree/glassnx\nBased on XorTroll's uLaunch. Stock updater disabled.",{"OK"},true);});
+        this->update_menu_item->AddOnKey(std::bind(&MainMenuLayout::update_DefaultKey,this));
         this->options_menu->AddItem(this->update_menu_item);
 
         this->Add(this->options_menu);
@@ -103,6 +100,10 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::activate_DefaultKey() {
+        if(GlassUpdatePending()) {
+            g_MainApplication->CreateShowDialog("GlassNX","Interrupted update. Restore previous version using Update / Recovery first.",{"OK"},true);
+            return;
+        }
         if(IsBasePresent()) {
             const bool ok=IsSystemActive()?DeactivateSystem():ActivateSystem();
             if(!ok) {
@@ -156,98 +157,31 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::update_DefaultKey() {
-        const auto json_data = man::RetrieveContent("https://api.github.com/repos/XorTroll/uLaunch/releases", "application/json");
-        if(json_data.empty()) {
-            ShowUpdateError();
+        const auto choice=g_MainApplication->CreateShowDialog("GlassNX Update & Recovery",
+            "Install a complete release from /glassnx/update.zip. Close all games before updating. Do not power off during installation.",
+            {"Install ZIP","Restore previous","Toggle safe mode","Cancel"},true);
+        if(choice==2){
+            const char *path="sdmc:/glassnx/safe-mode";
+            bool ok=false;
+            if(fs::ExistsFile(path))ok=remove(path)==0;
+            else if(auto fp=fopen(path,"wb"))ok=fclose(fp)==0;
+            g_MainApplication->CreateShowDialog("Safe rendering",ok?"Setting changed. Restart the console to apply.":"Unable to change setting",{"OK"},true);
             return;
         }
-
-        const auto json = ul::util::JSON::parse(json_data);
-        if(json.size() <= 0) {
-            ShowUpdateError();
-            return;
-        }
-
-        const auto last_id = json[0].value("tag_name", "");
-        if(last_id.empty()) {
-            ShowUpdateError();
-            return;
-        }
-
-        const auto last_ver = Version::FromString(last_id);
-        const auto cur_ver = Version::FromString(UL_VERSION);
-        if(last_ver.IsEqual(cur_ver)) {
-            g_MainApplication->CreateShowDialog(GetLanguageString("update_title"), GetLanguageString("update_equal"), { GetLanguageString("ok") }, true);
-        }
-        else if(last_ver.IsLower(cur_ver)) {
-            const auto option = g_MainApplication->CreateShowDialog(GetLanguageString("update_title"), GetLanguageString("update_version") + ": v" + last_ver.AsString() + "\n" + GetLanguageString("update_conf"), { GetLanguageString("yes"), GetLanguageString("cancel") }, true);
-            if(option == 0) {
-                this->options_menu->SetVisible(false);
-                this->update_download_bar->SetVisible(true);
-                this->info_text->SetText(GetLanguageString("update_progress_download"));
-
-                const auto download_url = "https://github.com/XorTroll/uLaunch/releases/download/" + last_id + "/uLaunch.zip";
-                man::RetrieveToFile(download_url, TemporaryReleaseZipPath, [&](const double done, const double total) {
-                    this->update_download_bar->SetMaxProgress(total);
-                    this->update_download_bar->SetProgress(done);
-                    g_MainApplication->CallForRender();
-                });
-                this->update_download_bar->SetProgress(0);
-                
-                this->info_text->SetText(GetLanguageString("update_progress_install"));
-
-                auto zip_file = zip_open(TemporaryReleaseZipPath, 0, 'r');
-                if(zip_file) {
-                    const auto file_count = zip_entries_total(zip_file);
-                    this->update_download_bar->SetMaxProgress((double)file_count);
-                    if(file_count > 0) {
-                        for(u32 i = 0; i < file_count; i++) {
-                            if(zip_entry_openbyindex(zip_file, i) == 0) {
-                                std::string entry_name = zip_entry_name(zip_file);
-                                entry_name = entry_name.substr(__builtin_strlen("SdOut/"));
-                                const auto is_dir = zip_entry_isdir(zip_file);
-                                if(!entry_name.empty()) {
-                                    entry_name = "sdmc:/" + entry_name;
-                                    if(is_dir) {
-                                        mkdir(entry_name.c_str(), 777);
-                                    }
-                                    else {
-                                        auto f = fopen(entry_name.c_str(), "wb");
-                                        if(f) {
-                                            void *read_buf;
-                                            size_t read_buf_size;
-                                            const auto read_size = zip_entry_read(zip_file, &read_buf, &read_buf_size);
-                                            fwrite(read_buf, read_size, 1, f);
-                                            free(read_buf);
-                                            fclose(f);
-                                        }
-                                    }
-                                }
-                            }
-                            zip_entry_close(zip_file);
-                            this->update_download_bar->SetProgress((double)(i + 1));
-                        }
-                    }
-                    zip_close(zip_file);
-
-                    this->update_download_bar->SetVisible(false);
-
-                    g_MainApplication->CreateShowDialog(GetLanguageString("update_title"), GetLanguageString("update_success"), { GetLanguageString("reboot") }, true);
-                    g_MainApplication->FadeOut();
-                    RebootSystem();
-                }
-                else {
-                    ShowUpdateError();
-                }
-
-                this->ResetInfoText();
-                this->options_menu->SetVisible(true);
-                remove(TemporaryReleaseZipPath);
-            }
-        }
-        else if(last_ver.IsHigher(cur_ver)) {
-            g_MainApplication->CreateShowDialog(GetLanguageString("update_title"), GetLanguageString("update_higher"), { GetLanguageString("ok") }, true);
-        }
+        if(choice!=0&&choice!=1)return;
+        const auto confirm=g_MainApplication->CreateShowDialog(choice==0?"Install update?":"Restore previous version?",
+            "Confirm that all games are closed. Keep your SD card inserted and console charged. Your saves and themes will not be replaced.",{"Continue","Cancel"},true);
+        if(confirm!=0)return;
+        this->options_menu->SetVisible(false);
+        this->info_text->SetText(choice==0?"Validating and installing update...":"Restoring previous files...");
+        g_MainApplication->CallForRender();
+        std::string message;
+        const bool ok=choice==0?InstallGlassUpdate(message):RestoreGlassUpdate(message);
+        this->ResetInfoText();this->options_menu->SetVisible(true);
+        this->activate_menu_item->SetName(GetStatus());this->ReloadMenu();
+        if(ok) {
+            const auto reboot=g_MainApplication->CreateShowDialog("GlassNX",message,{"Restart now"},true);
+            if(reboot==0){g_MainApplication->FadeOut();RebootSystem();}
+        } else g_MainApplication->CreateShowDialog("GlassNX",message,{"OK"},true);
     }
-
 }
