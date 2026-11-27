@@ -1,5 +1,6 @@
 #include <ul/menu/ui/ui_StartupMenuLayout.hpp>
 #include <algorithm>
+#include <ul/glassnx/Surface.hpp>
 #include <cmath>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/fs/fs_Stdio.hpp>
@@ -57,9 +58,7 @@ namespace ul::menu::ui {
                     auto &profile=profiles[Start()+i];
                     const int x=Left()+i*(CardW+Gap),y=Top;
                     const bool active=Start()+i==selected;
-                    r->RenderRoundedRectangleFill({19,23,54,62},x,y+12,CardW,CardH,48);
-                    r->RenderRoundedRectangleFill(active?pu::ui::Color{149,170,229,155}:pu::ui::Color{51,59,103,125},x,y,CardW,CardH,48);
-                    r->RenderRoundedRectangle(active?pu::ui::Color{239,246,255,225}:pu::ui::Color{224,230,255,88},x,y,CardW,CardH,48);
+                    ul::glassnx::DrawSurface(r,x,y,CardW,CardH,48,active?pu::ui::Color{149,170,229,155}:pu::ui::Color{51,59,103,125},active);
                     r->RenderCircleFill({221,232,255,active?static_cast<u8>(125):static_cast<u8>(65)},x+160,y+138,105);
                     r->RenderCircleFill({47,57,104,210},x+160,y+138,96);
                     if(profile.icon)Avatar(profile.icon,x+68,y+46,184);

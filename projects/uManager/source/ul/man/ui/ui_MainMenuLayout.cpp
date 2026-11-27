@@ -1,5 +1,6 @@
 #include <ul/man/ui/ui_MainApplication.hpp>
 #include <ul/glassnx/Brand.hpp>
+#include <ul/glassnx/Surface.hpp>
 #include <ul/menu/menu_Cache.hpp>
 #include <ul/menu/menu_Entries.hpp>
 #include <ul/acc/acc_Accounts.hpp>
@@ -37,10 +38,7 @@ namespace ul::man::ui {
                 r->RenderRoundedRectangleFill({165,132,216,36},-95,290,810,810,280);
                 r->RenderRoundedRectangleFill({99,176,231,32},1250,-230,910,770,250);
                 auto glass=[&](int x,int y,int w,int h) {
-                    r->RenderRoundedRectangleFill({12,17,47,100},x,y+8,w,h,40);
-                    r->RenderRoundedRectangleFill({143,161,223,64},x,y,w,h,40);
-                    r->RenderRoundedRectangle({220,230,255,90},x,y,w,h,40);
-                    r->RenderRoundedRectangle({241,239,255,28},x+3,y+3,w-6,h-6,37);
+                    ul::glassnx::DrawSurface(r,x,y,w,h,40,{143,161,223,84});
                 };
                 glass(70,230,550,680);glass(665,230,1185,680);
                 r->RenderRoundedRectangleFill({122,145,218,80},118,282,155,155,42);

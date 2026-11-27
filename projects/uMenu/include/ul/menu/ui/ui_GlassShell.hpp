@@ -85,7 +85,7 @@ namespace ul::menu::ui {
         unsigned frame_count=0;
         float frame_ms=0,frame_max=0,display_fps=0,display_max=0;
         std::chrono::steady_clock::time_point transition{};
-        pu::sdl2::TextureHandle::Ref banner;
+        pu::sdl2::TextureHandle::Ref banner,hero_frost;
         u64 banner_id = 0;
         bool banner_checked = false;
         void LoadPreferences();
@@ -143,7 +143,7 @@ namespace ul::menu::ui {
         s32 GetHeight() override {return 1080;}
         void RecordLaunch(u64 id);
         void PrepareTransition();
-        void Invalidate() {CloseGallery();focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();banner_checked=false;}
+        void Invalidate() {CloseGallery();focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}

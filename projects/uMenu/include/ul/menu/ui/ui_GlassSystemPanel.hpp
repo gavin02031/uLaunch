@@ -1,5 +1,6 @@
 #pragma once
 #include <pu/Plutonium>
+#include <ul/glassnx/Surface.hpp>
 
 namespace ul::menu::ui {
     // Lightweight shared material for advanced system pages.
@@ -15,10 +16,7 @@ namespace ul::menu::ui {
             s32 GetWidth() override{return w;}
             s32 GetHeight() override{return h;}
             void OnRender(pu::ui::render::Renderer::Ref &r,const s32 px,const s32 py) override {
-                r->RenderRoundedRectangleFill({14,20,46,78},px,py+8,w,h,48);
-                r->RenderRoundedRectangleFill({49,65,106,106},px,py,w,h,48);
-                r->RenderRoundedRectangle({230,238,255,105},px,py,w,h,48);
-                r->RenderRoundedRectangle({236,241,255,28},px+3,py+3,w-6,h-6,45);
+                ul::glassnx::DrawSurface(r,px,py,w,h,48,{49,65,106,130});
             }
             void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override{}
     };

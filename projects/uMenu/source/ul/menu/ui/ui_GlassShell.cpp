@@ -1,6 +1,7 @@
 #include <ul/menu/ui/ui_GlassShell.hpp>
 #include <ul/menu/ui/ui_ArtworkClient.hpp>
 #include <ul/glassnx/Artwork.hpp>
+#include <ul/glassnx/Surface.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/menu/ui/ui_Common.hpp>
 #include <algorithm>
@@ -53,7 +54,7 @@ namespace ul::menu::ui {
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
         CloseGallery();
-        liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();banner_checked=false;
+        liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;
         theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
     }
@@ -169,7 +170,7 @@ namespace ul::menu::ui {
         if(action==2){
             if(g_MenuApplication->DisplayDialog("Restore default artwork?","Remove custom cover and banner for this title.",{"Restore","Cancel"},true)==0){
                 remove((root+".cover1024").c_str());remove((root+".cover").c_str());remove((root+".hero").c_str());remove((root+".jpg").c_str());
-                custom_icons.erase(id);banner.reset();banner_checked=false;
+                custom_icons.erase(id);banner.reset();hero_frost.reset();banner_checked=false;
             }
             return;
         }
@@ -191,6 +192,7 @@ namespace ul::menu::ui {
     void GlassShell::GalleryMove(int delta){
         const size_t n=gallery.matching?gallery.games.size():gallery.pictures.size();
         if(n==0)return;
+        if(n==1)return;
         gallery.index=(gallery.index+n+(delta<0?n-1:1))%n;
         if(!gallery.matching)GalleryPreview();
     }
@@ -220,7 +222,11 @@ namespace ul::menu::ui {
     void GlassShell::GallerySelect(){
         if(Conservative()){CloseGallery();return;}
         if(gallery.matching){
+            if(gallery.games.empty()){
+                gallery.error.clear();art::FindArtworkGames(gallery.title,gallery.games,gallery.error);return;
+            }
             if(gallery.index>=gallery.games.size())return;
+            gallery.pictures.clear();
             gallery.error.clear();
             if(!art::FindPictures(gallery.games[gallery.index].id,gallery.hero,gallery.pictures,gallery.error))return;
             gallery.matching=false;gallery.index=0;GalleryPreview();return;
@@ -244,7 +250,7 @@ namespace ul::menu::ui {
         }
         if(saved){
             const auto id=gallery.id;const bool hero=gallery.hero;
-            CloseGallery();custom_icons.erase(id);banner.reset();banner_checked=false;
+            CloseGallery();custom_icons.erase(id);banner.reset();hero_frost.reset();banner_checked=false;
             g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Square cover applied");
         }
     }
@@ -303,7 +309,7 @@ namespace ul::menu::ui {
         }
         Button(r,78,960,250,82,"B  Back",false,[this](){CloseGallery();});
         Button(r,375,960,295,82,"L  Previous",false,[this](){GalleryMove(-1);});
-        Button(r,700,960,520,82,gallery.matching?"A  Choose game":gallery.image?"A  Apply artwork":"A  Retry preview",true,[this](){GallerySelect();});
+        Button(r,700,960,520,82,gallery.matching?(gallery.games.empty()?"A  Retry search":"A  Choose game"):gallery.image?"A  Apply artwork":"A  Retry preview",true,[this](){GallerySelect();});
         Button(r,1250,960,295,82,"R  Next",false,[this](){GalleryMove(1);});
     }
     pu::sdl2::TextureHandle::Ref GlassShell::CustomIcon(u64 id){
@@ -473,7 +479,7 @@ namespace ul::menu::ui {
     }
     pu::sdl2::TextureHandle::Ref GlassShell::Banner(u64 id) {
         if(banner_checked && banner_id==id)return banner;
-        banner_checked=true;banner_id=id;banner.reset();
+        banner_checked=true;banner_id=id;banner.reset();hero_frost.reset();
         char name[120]={};
         snprintf(name,sizeof(name),"sdmc:/glassnx/art/%016llx.jpg",static_cast<unsigned long long>(id));
         char custom[120]={};snprintf(custom,sizeof(custom),"sdmc:/glassnx/art/%016llx.hero",static_cast<unsigned long long>(id));
@@ -494,6 +500,30 @@ namespace ul::menu::ui {
                 if(crop.w>0&&crop.h>0&&SDL_BlitScaled(image,&crop,scaled,nullptr)==0){
                     auto tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),scaled);
                     if(tex)banner=pu::sdl2::TextureHandle::New(tex);
+                    // Precompute only the area under the information sheet from
+                    // the actual hero, not the unrelated HOME wallpaper.
+                    if(banner){
+                        auto low=SDL_CreateRGBSurfaceWithFormat(0,66,25,32,SDL_PIXELFORMAT_RGBA32);
+                        auto soft=SDL_CreateRGBSurfaceWithFormat(0,66,25,32,SDL_PIXELFORMAT_RGBA32);
+                        SDL_Rect area{13,140,660,248};
+                        if(low&&soft&&SDL_BlitScaled(scaled,&area,low,nullptr)==0){
+                            const auto src=static_cast<const u8*>(low->pixels);
+                            auto dst=static_cast<u8*>(soft->pixels);
+                            for(int yy=0;yy<25;yy++)for(int xx=0;xx<66;xx++){
+                                for(int k=0;k<3;k++){
+                                    unsigned sum=0;
+                                    for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++)
+                                        sum+=src[std::clamp(yy+dy,0,24)*low->pitch+std::clamp(xx+dx,0,65)*4+k];
+                                    dst[yy*soft->pitch+xx*4+k]=static_cast<u8>(sum/25);
+                                }
+                                dst[yy*soft->pitch+xx*4+3]=255;
+                            }
+                            auto frost=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),soft);
+                            if(frost){SDL_SetTextureScaleMode(frost,SDL_ScaleModeLinear);hero_frost=pu::sdl2::TextureHandle::New(frost);}
+                        }
+                        if(low)SDL_FreeSurface(low);
+                        if(soft)SDL_FreeSurface(soft);
+                    }
                 }
                 SDL_FreeSurface(scaled);
             }
@@ -612,17 +642,21 @@ namespace ul::menu::ui {
             const float rim=std::max(0.f,1.f-std::abs(d+.65f)/1.25f);
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float u=float(px)/tw;
-            const float angle=.20f+.80f*std::pow(1-v,2.f);
+            const float angle=.20f+.80f*(1-v)*(1-v);
             const float lower=std::max(0.f,(v-.70f)/.30f)*(0.25f+0.75f*u);
             const float edge_shadow=std::max(0.f,1.f-std::abs(d+2.f)/3.f)*lower;
             const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
-            const float shine=(1.f-v)*.075f+reflection*.075f+rim*(selected?.70f:.54f)*angle+light*.045f+rim*lower*.14f;
+            const float shine=(1.f-v)*.052f+reflection*.095f+rim*(selected?.78f:.61f)*angle+light*.065f+rim*lower*.20f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
             // Sample the real wallpaper with a low-frequency blur and edge
             // displacement. Cached per panel position, never reads the GPU framebuffer.
-            const float edge=std::max(0.f,1.f-std::abs(d+1.f)/6.f);
-            const int sx=std::clamp(int((x+px*4+(px-tw*.5f)*edge*.17f)/8.f),0,239);
-            const int sy=std::clamp(int((y+py*4+(py-th*.5f)*edge*.17f)/8.f),0,134);
+            const float edge=std::clamp(1.f-std::abs(d+1.f)/7.f,0.f,1.f);
+            const float lens=edge*edge;
+            const float nx=px+.5f<tw*.5f?-1.f:1.f,ny=py+.5f<th*.5f?-1.f:1.f;
+            const float gradx=ox>0.f?ox/std::max(1.f,std::sqrt(ox*ox+oy*oy)):qx>qy?1.f:0.f;
+            const float grady=oy>0.f?oy/std::max(1.f,std::sqrt(ox*ox+oy*oy)):qy>=qx?1.f:0.f;
+            const int sx=std::clamp(int((x+px*4-nx*gradx*lens*24.f)/8.f),0,239);
+            const int sy=std::clamp(int((y+py*4-ny*grady*lens*24.f)/8.f),0,134);
             const int radius_sample=blur/15;
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
@@ -636,10 +670,10 @@ namespace ul::menu::ui {
                     const float sc=k==0?shade.r:k==1?shade.g:shade.b;
                     bg=bg*(1-shade.a/255.f)+sc*(shade.a/255.f);
                 }
-                const float colored=bg*.81f+tc*.19f;
+                const float colored=bg*.86f+tc*.14f;
                 rgba[p+k]=byte(colored*(1.f-.12f*edge_shadow)+(255-colored)*shine);
             }
-            rgba[p+3]=byte(cover*((100-glass)*1.15f+(gpu?30.f:92.f)+20*(1-v)+rim*(selected?112:77)+light*14));
+            rgba[p+3]=byte(cover*((100-glass)*1.15f+(gpu?30.f:82.f)+18*(1-v)+rim*(selected?125:90)+light*18));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
         if(!tex)return {};
@@ -656,8 +690,7 @@ namespace ul::menu::ui {
         if(tex)Picture(r,tex,x,y,w,h);
         else {
             const auto c=GlassColors[theme];
-            r->RenderRoundedRectangleFill({c.r,c.g,c.b,125},x,y,w,h,radius);
-            r->RenderRoundedRectangle({233,239,255,70},x,y,w,h,radius);
+            ul::glassnx::DrawSurface(r,x,y,w,h,radius,{c.r,c.g,c.b,125},selected);
         }
         if(selected) {
             r->RenderRoundedRectangle({178,203,255,130},x-3,y-3,w+6,h+6,radius+3);
@@ -704,8 +737,7 @@ namespace ul::menu::ui {
         t->OnRender(r,center?x-t->GetWidth()/2:x,y);
     }
     void GlassShell::Button(Renderer &r,int x,int y,int w,int h,const std::string &s,bool selected,std::function<void()> cb) {
-        if(selected)r->RenderRoundedRectangleFill({151,171,234,130},x,y,w,h,h/2);
-        else r->RenderRoundedRectangleFill({29,32,79,42},x,y,w,h,h/2);
+        ul::glassnx::DrawSurface(r,x,y,w,h,h/2,selected?pu::ui::Color{151,171,234,150}:pu::ui::Color{29,32,79,62},selected);
         Label(r,s,x+w/2,y+(h-37)/2,30,w-24,true);
         hits.push_back({x,y,w,h,cb});
     }
@@ -728,8 +760,8 @@ namespace ul::menu::ui {
         auto box=[&](int a,int b,int w,int h){r->RenderRoundedRectangle(white,x+a*size/24,y+b*size/24,w*size/24,h*size/24,std::max(2,size/10));};
         auto dot=[&](int a,int b,int rad){r->RenderCircleFill(white,x+a*size/24,y+b*size/24,std::max(2,rad*size/24));};
         if(kind=="home"){line(2,11,12,2);line(12,2,22,11);box(5,10,14,12);line(12,16,12,22);}
-        else if(kind=="games"){box(2,6,20,13);line(6,10,6,16);line(3,13,9,13);dot(16,11,1);dot(19,15,1);}
-        else if(kind=="apps"){for(int a:{3,13})for(int b:{3,13})box(a,b,8,8);}
+        else if(kind=="games"){box(2,5,20,14);line(7,9,7,15);line(4,12,10,12);dot(16,10,1);dot(19,13,1);dot(13,13,1);dot(16,16,1);}
+        else if(kind=="apps"){for(int a:{3,13})for(int b:{3,13})r->RenderRoundedRectangleFill({246,249,255,235},x+a*size/24,y+b*size/24,8*size/24,8*size/24,std::max(2,size/10));}
         else if(kind=="settings"){r->RenderCircle(white,x+size/2,y+size/2,size/4);for(int i=0;i<8;i++){float a=i*3.14159265f/4;line(12+int(7*cosf(a)),12+int(7*sinf(a)),12+int(11*cosf(a)),12+int(11*sinf(a)));}r->RenderCircle(white,x+size/2,y+size/2,std::max(2,size/9));}
         else if(kind=="wifi"){arc(12,19,15,225,315);arc(12,19,10,225,315);arc(12,19,5,225,315);dot(12,20,1);}
         else if(kind=="bluetooth"){line(12,2,12,22);line(12,2,19,8);line(19,8,5,19);line(5,5,19,16);line(19,16,12,22);}
@@ -749,7 +781,7 @@ namespace ul::menu::ui {
         else if(kind=="palette"){arc(12,12,10,30,330);dot(7,8,2);dot(12,5,2);dot(17,8,2);dot(7,15,2);arc(17,17,4,180,360);}
         else if(kind=="amiibo"){arc(12,12,9,10,160);arc(12,12,9,190,340);dot(12,12,3);dot(12,2,1);dot(12,22,1);}
         else if(kind=="mii"){r->RenderCircle(white,x+size/2,y+size/2,size*10/24);dot(8,9,1);dot(16,9,1);arc(12,13,5,15,165);}
-        else if(kind=="folder"){box(2,7,20,14);line(3,7,3,4);line(3,4,10,4);line(10,4,13,7);}
+        else if(kind=="folder"){box(2,7,20,14);line(3,7,3,4);line(3,4,10,4);line(10,4,13,7);line(5,11,19,11);}
         else if(kind=="search"){r->RenderCircle(white,x+size*9/24,y+size*9/24,size*7/24);line(14,14,22,22);}
         else {box(3,3,18,18);dot(12,12,2);}
     }
@@ -840,10 +872,11 @@ namespace ul::menu::ui {
         const int rounding=std::max(20,side/6);
         r->RenderRoundedRectangleFill({15,20,45,65},ix,iy+5,side,side,rounding);
         if(system_glyph){
-            r->RenderRoundedRectangleFill({accent.r,accent.g,accent.b,195},ix,iy,side,side,rounding);
-            r->RenderRoundedRectangleFill({224,236,255,38},ix+5,iy+5,side-10,side-10,rounding-3);
-            r->RenderRoundedRectangle({234,242,255,130},ix,iy,side,side,rounding);
-            const int glyph=side*54/100;
+            ul::glassnx::DrawSurface(r,ix,iy,side,side,rounding,{accent.r,accent.g,accent.b,180},selected);
+            r->RenderRoundedRectangleFill({229,239,255,32},ix+9,iy+9,side-18,side-18,rounding-4);
+            r->RenderCircleFill({22,35,72,70},ix+side/2,iy+side/2,side*33/100);
+            r->RenderCircle({232,244,255,90},ix+side/2,iy+side/2,side*33/100);
+            const int glyph=side*48/100;
             Glyph(r,system_glyph,ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
         } else if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
         else {Card(r,ix,iy,side,side);Glyph(r,"apps",x+w/2-34,y+h/2-55,68);}
@@ -998,7 +1031,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.16",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.17",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1154,7 +1187,7 @@ namespace ul::menu::ui {
         if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.16 · SAFE":"v0.16",130,76,27);
+        Label(r,safe_mode?"v0.17 · SAFE":"v0.17",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -1220,9 +1253,8 @@ namespace ul::menu::ui {
                     }
                     RoundedArt(r,icon,805,165,390,390,58);
                 }
-                Card(r,98,295,660,248);
-                r->RenderRoundedRectangleFill({38,47,78,72},98,295,660,248,30);
-                r->RenderRoundedRectangle({255,255,255,100},98,295,660,248,30);
+                if(wide&&hero_frost&&!Conservative())RoundedArt(r,hero_frost,98,295,660,248,38);
+                ul::glassnx::DrawSurface(r,98,295,660,248,38,{20,28,52,static_cast<u8>(wide&&hero_frost?132:168)});
                 if(suspended){
                     r->RenderRoundedRectangleFill({94,156,139,205},122,320,14,14,9);
                     Label(r,"CONTINUE PLAYING",150,310,27,570);
@@ -1360,15 +1392,16 @@ namespace ul::menu::ui {
                     Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
                     const auto accent=i==2?pu::ui::Color{91,174,242,225}:i==3?pu::ui::Color{128,145,242,225}:pu::ui::Color{170,138,228,225};
                     r->RenderCircleFill(on?accent:pu::ui::Color{45,58,99,150},c.x+c.w/2,c.y+65,46);
-                    r->RenderCircle({235,244,255,100},c.x+c.w/2,c.y+65,46);
+                    r->RenderCircle({235,244,255,150},c.x+c.w/2,c.y+65,46);
+                    r->RenderCircle({247,250,255,65},c.x+c.w/2,c.y+65,41);
                     Glyph(r,icons[i-2],c.x+c.w/2-26,c.y+39,52);
                     Label(r,c.label,c.x+c.w/2,c.y+117,27,c.w-14,true);
                     Label(r,c.detail,c.x+c.w/2,c.y+148,27,c.w-14,true);
                     hits.push_back({c.x,c.y,c.w,c.h,c.action});continue;
                 }
                 if(settings) {
-                    if(focus==static_cast<int>(i))r->RenderRoundedRectangleFill({132,155,223,105},c.x,c.y,c.w,c.h,26);
-                    else r->RenderRoundedRectangleFill({31,37,76,48},c.x,c.y,c.w,c.h,26);
+                    const bool selected=focus==static_cast<int>(i);
+                    ul::glassnx::DrawSurface(r,c.x,c.y,c.w,c.h,26,selected?pu::ui::Color{132,155,223,110}:pu::ui::Color{31,37,76,65},selected);
                 } else Card(r,c.x,c.y,c.w,c.h,focus==static_cast<int>(i));
                 Label(r,c.label,c.x+25,c.y+12,37,c.w-50);
                 Label(r,c.detail,c.x+25,c.y+(settings?51:65),27,c.w-50);
