@@ -1,6 +1,7 @@
 #pragma once
 #include <ul/menu/ui/ui_EntryMenu.hpp>
 #include <map>
+#include <ul/menu/ui/ui_LiquidGlass.hpp>
 
 namespace ul::menu::ui {
     class GlassShell : public pu::ui::elm::Element {
@@ -67,6 +68,9 @@ namespace ul::menu::ui {
         bool touched = false;
         bool icon_budget = true;
         bool safe_mode = false;
+        bool enhanced_glass = false;
+        LiquidGlass liquid_glass;
+        void ToggleEnhancedGlass();
         size_t material_bytes = 0;
         void ClearMaterials();
         bool Conservative() const;

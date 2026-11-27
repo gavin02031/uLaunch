@@ -43,14 +43,27 @@ namespace ul::menu::ui {
     }
     GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old,std::function<void()> back,std::function<void()> close)
         :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();
-        if(auto fp=fopen("sdmc:/glassnx/safe-mode","rb")){safe_mode=true;fclose(fp);}}
+        if(auto fp=fopen("sdmc:/glassnx/safe-mode","rb")){safe_mode=true;fclose(fp);}
+        if(auto fp=fopen("sdmc:/glassnx/enhanced-glass","rb")){enhanced_glass=true;fclose(fp);}}
 
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
-        ClearMaterials();texts.clear();banner.reset();banner_checked=false;
+        liquid_glass.Release();ClearMaterials();texts.clear();banner.reset();banner_checked=false;
         drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    }
+    void GlassShell::ToggleEnhancedGlass(){
+        if(enhanced_glass) {
+            if(remove("sdmc:/glassnx/enhanced-glass")!=0){g_MenuApplication->ShowNotification("Could not save glass mode");return;}
+            enhanced_glass=false;
+        } else {
+            if(g_MenuApplication->DisplayDialog("Experimental GPU glass","Not yet tested on Switch hardware. Disable if unstable. Safe Mode always overrides this option.",{"Enable","Cancel"},true)!=0)return;
+            auto fp=fopen("sdmc:/glassnx/enhanced-glass","wb");
+            if(!fp){g_MenuApplication->ShowNotification("Could not save glass mode");return;}
+            fclose(fp);enhanced_glass=true;
+        }
+        PrepareTransition();
     }
     void GlassShell::ToggleSafeMode(){
         if(safe_mode){
@@ -308,7 +321,8 @@ namespace ul::menu::ui {
     }
     pu::sdl2::TextureHandle::Ref GlassShell::Material(int x,int y,int w,int h,bool selected) {
         if(Conservative())return {};
-        const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected);
+        const bool gpu=enhanced_glass&&liquid_glass.IsReady();
+        const auto key=std::to_string(gpu?0:x)+"/"+std::to_string(gpu?0:y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected)+"/"+std::to_string(gpu);
         auto it=materials.find(key);if(it!=materials.end())return it->second;
         // Cache at half logical resolution; the GPU composites the translucent
         // textured bevel. No per-frame rasterization or framebuffer readback.
@@ -330,7 +344,8 @@ namespace ul::menu::ui {
             const float rim=std::max(0.f,1.f-std::abs(d+.65f)/1.25f);
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float angle=.28f+.72f*(1-v)*(1-v);
-            const float shine=(1.f-v)*.06f+rim*(selected?.64f:.43f)*angle+light*.08f;
+            const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
+            const float shine=(1.f-v)*.06f+reflection*.035f+rim*(selected?.64f:.43f)*angle+light*.08f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
             // Sample the real wallpaper with a low-frequency blur and edge
             // displacement. Cached per panel position, never reads the GPU framebuffer.
@@ -341,7 +356,7 @@ namespace ul::menu::ui {
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
                 float bg=tc;
-                if(!backdrop.empty()) {
+                if(!gpu&&!backdrop.empty()) {
                     unsigned sum=0;
                     for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
                         sum+=backdrop[(std::clamp(sy+dy*radius_sample,0,134)*240+std::clamp(sx+dx*radius_sample,0,239))*4+k];
@@ -353,7 +368,7 @@ namespace ul::menu::ui {
                 const float colored=bg*.72f+tc*.28f;
                 rgba[p+k]=byte(colored+(255-colored)*shine);
             }
-            rgba[p+3]=byte(cover*((100-glass)*1.15f+92+20*(1-v)+rim*(selected?112:77)+light*14));
+            rgba[p+3]=byte(cover*((100-glass)*1.15f+(gpu?30.f:92.f)+20*(1-v)+rim*(selected?112:77)+light*14));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
         if(!tex)return {};
@@ -363,7 +378,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::Card(Renderer &r,int x,int y,int w,int h,bool selected) {
         const int radius=std::min(40,h/2);
-        r->RenderRoundedRectangleFill({18,18,47,45},x,y+5,w,h,radius);
+        r->RenderRoundedRectangleFill({29,25,66,18},x-4,y+12,w+8,h,radius+4);
+        r->RenderRoundedRectangleFill({18,18,47,32},x,y+5,w,h,radius);
+        if(enhanced_glass&&!Conservative())liquid_glass.Draw(pu::ui::render::GetMainRenderer(),x,y,w,h);
         const auto tex=Material(x,y,w,h,selected);
         if(tex)Picture(r,tex,x,y,w,h);
         else {
@@ -384,7 +401,7 @@ namespace ul::menu::ui {
             if(texts.size()>=160) texts.clear();
             auto t=pu::ui::elm::TextBlock::New(0,0,s);
             t->SetFont(pu::ui::MakeDefaultFontName(size));
-            t->SetColor({255,255,255,255});
+            t->SetColor(size<30?pu::ui::Color{231,238,255,235}:pu::ui::Color{255,255,255,255});
             // Fit once when caching rather than letting long titles marquee
             // into an arbitrary cropped middle. Preserve UTF-8 boundaries.
             if(maxw>0 && t->GetWidth()>maxw) {
@@ -654,6 +671,7 @@ namespace ul::menu::ui {
                         row("GlassNX","Version 0.10",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
+                        row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
                         row("Recovery","Legacy interface",legacy);break;
                 }
                 return c;
@@ -782,6 +800,10 @@ namespace ul::menu::ui {
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;UpdateMotion();
+        if(enhanced_glass&&!Conservative()) {
+            const auto wallpaper=GetBackgroundTexture();const auto tint=Tints[theme];
+            liquid_glass.Prepare(pu::ui::render::GetMainRenderer(),wallpaper?wallpaper->Get():nullptr,blur,{tint.r,tint.g,tint.b,tint.a});
+        } else if(liquid_glass.IsReady())liquid_glass.Release();
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
         Picture(r,GetBackgroundTexture(),0,0,1920,1080);
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
