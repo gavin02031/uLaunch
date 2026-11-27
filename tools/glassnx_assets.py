@@ -4,6 +4,7 @@ import math
 import struct
 import sys
 import zlib
+from glassnx_icons import generate as generate_icons
 from pathlib import Path
 
 def chunk(kind, data):
@@ -103,6 +104,7 @@ def landscape(x,y,w,h):
     return clamp(r*shade),clamp(g*shade),clamp(b*shade),255
 
 def main(root):
+    generate_icons(root)
     png(root/"Background.png", wallpaper)
     png(root/"GlassNX"/"Lockscreen.png",landscape,(1920,1080))
     png(root/"GlassNX"/"Unlock.png",lambda x,y,w,h:glass(x,y,w,h),(720,120))

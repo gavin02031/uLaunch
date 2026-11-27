@@ -789,7 +789,7 @@ namespace ul::menu::ui {
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
         this->SetGlassMode(true);
-        UL_LOG_INFO("GlassNX v0.17: custom HOME layout created and selected");
+        UL_LOG_INFO("GlassNX v0.18: custom HOME layout created and selected");
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
@@ -1173,7 +1173,8 @@ namespace ul::menu::ui {
             const auto proper_ipt = CreateLaunchTargetInput(hb_entry.hb_info.nro_target);
 
             g_MenuApplication->FadeOutToNonLibraryApplet();
-            UL_RC_ASSERT(smi::LaunchHomebrewLibraryApplet(proper_ipt.nro_path, proper_ipt.nro_argv));
+            const auto rc=smi::LaunchHomebrewLibraryApplet(proper_ipt.nro_path, proper_ipt.nro_argv);
+            if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Homebrew could not launch");UL_LOG_WARN("GlassNX homebrew launch failed: 0x%x",rc);return;}
             g_MenuApplication->Finalize();
         }
         else if(option == 1) {

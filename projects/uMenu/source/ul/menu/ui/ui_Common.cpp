@@ -296,7 +296,7 @@ namespace ul::menu::ui {
     }
 
     void ShowAboutDialog() {
-        g_MenuApplication->DisplayDialog("GlassNX v0.17", "Native Liquid Glass HOME replacement. Based on XorTroll's uLaunch.\nhttps://github.com/gavin02031/uLaunch/tree/glassnx", { GetLanguageString("ok") }, true);
+        g_MenuApplication->DisplayDialog("GlassNX v0.18", "Native Liquid Glass HOME replacement. Based on XorTroll's uLaunch.\nhttps://github.com/gavin02031/uLaunch/tree/glassnx", { GetLanguageString("ok") }, true);
     }
 
     void ShowSettingsMenu() {
@@ -309,7 +309,8 @@ namespace ul::menu::ui {
 
     void ShowUserPage() {
         g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletMyPage);
-        UL_RC_ASSERT(ul::menu::smi::OpenUserPage());
+        const auto rc=ul::menu::smi::OpenUserPage();
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Profile could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
         g_MenuApplication->Finalize();
     }
 
@@ -347,10 +348,11 @@ namespace ul::menu::ui {
             case 2: {
                 g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletController);
                 u32 style_set;
-                UL_RC_ASSERT(hidGetSupportedNpadStyleSet(&style_set));
+                auto rc=hidGetSupportedNpadStyleSet(&style_set);
                 HidNpadJoyHoldType hold_type;
-                UL_RC_ASSERT(hidGetNpadJoyHoldType(&hold_type));
-                UL_RC_ASSERT(ul::menu::smi::OpenControllerKeyRemapping(style_set, hold_type));
+                if(R_SUCCEEDED(rc))rc=hidGetNpadJoyHoldType(&hold_type);
+                if(R_SUCCEEDED(rc))rc=ul::menu::smi::OpenControllerKeyRemapping(style_set, hold_type);
+                if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Controller mapping could not open");return;}
                 g_MenuApplication->Finalize();
                 break;
             }
@@ -372,7 +374,8 @@ namespace ul::menu::ui {
             // TODO (low priority): check if starts with http(s), maybe even add it if user did not put it (thus links like google.com would be valid regardless)
             if(R_SUCCEEDED(ShowSwkbd(&swkbd, url, sizeof(url)))) {
                 g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletSwkbd);
-                UL_RC_ASSERT(ul::menu::smi::OpenWebPage(url));
+                const auto rc=ul::menu::smi::OpenWebPage(url);
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Browser could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
                 g_MenuApplication->Finalize();
             }
         }
@@ -381,19 +384,22 @@ namespace ul::menu::ui {
     void ShowAlbum() {
         // Cannot force to launch actual album applet, ams has no option for that (it will likely launch hbmenu due to default user key override config)
         g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletPhotoViewer);
-        UL_RC_ASSERT(ul::menu::smi::OpenAlbum());
+        const auto rc=ul::menu::smi::OpenAlbum();
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Album could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
         g_MenuApplication->Finalize();
     }
 
     void ShowMiiEdit() {
         g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletMiiEdit);
-        UL_RC_ASSERT(ul::menu::smi::OpenMiiEdit());
+        const auto rc=ul::menu::smi::OpenMiiEdit();
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Mii editor could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
         g_MenuApplication->Finalize();
     }
 
     void ShowNetConnect() {
         g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletNetConnect);
-        UL_RC_ASSERT(ul::menu::smi::OpenNetConnect());
+        const auto rc=ul::menu::smi::OpenNetConnect();
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("Network setup could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
         g_MenuApplication->Finalize();
     }
 
@@ -404,7 +410,8 @@ namespace ul::menu::ui {
         }
 
         g_MenuApplication->FadeOutToLibraryApplet(AppletId_LibraryAppletCabinet);
-        UL_RC_ASSERT(ul::menu::smi::OpenCabinet(static_cast<NfpLaStartParamTypeForAmiiboSettings>(option)));
+        const auto rc=ul::menu::smi::OpenCabinet(static_cast<NfpLaStartParamTypeForAmiiboSettings>(option));
+        if(R_FAILED(rc)){g_MenuApplication->FadeIn();g_MenuApplication->ShowNotification("amiibo could not open");UL_LOG_WARN("GlassNX applet request failed: 0x%x",rc);return;}
         g_MenuApplication->Finalize();
     }
 

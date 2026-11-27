@@ -1,4 +1,5 @@
 #include <ul/menu/ui/ui_QuickMenu.hpp>
+#include <ul/glassnx/Surface.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/cfg/cfg_Config.hpp>
 #include <ul/acc/acc_Accounts.hpp>
@@ -108,12 +109,13 @@ namespace ul::menu::ui {
         }
         this->options_menu->SetVisible(this->bg_alpha != 0);
 
-        drawer->RenderRectangleFill(MakeBackgroundColor(static_cast<u8>(this->bg_alpha)), this->GetX(), this->GetY(), this->GetWidth(), this->GetHeight());
+        if(this->bg_alpha>0)drawer->RenderRectangleFill(MakeBackgroundColor(static_cast<u8>(this->bg_alpha)), this->GetX(), this->GetY(), this->GetWidth(), this->GetHeight());
 
         if(this->bg_alpha > 0) {
             if(this->bg_alpha < BackgroundAlphaMax) {
                 drawer->SetBaseRenderAlpha(static_cast<u8>(this->bg_alpha));
             }
+            ul::glassnx::DrawSurface(drawer,270,135,1380,880,44,{35,48,81,190});
             this->options_menu->OnRender(drawer, this->options_menu->GetProcessedX(), this->options_menu->GetProcessedY());
             if(this->bg_alpha < BackgroundAlphaMax) {
                 drawer->ResetBaseRenderAlpha();

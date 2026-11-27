@@ -16,7 +16,7 @@ jobs:
     - name: Update packages and install Python
       run: |
         sudo -n apt-get update
-        sudo -n apt-get install -y --no-install-recommends patch autoconf automake diffutils pkgconf fakeroot git maven file tar bzip2 zstd python3 python3-requests python-is-python3 zip ca-certificates
+        sudo -n apt-get install -y --no-install-recommends patch autoconf automake diffutils pkgconf fakeroot git maven file tar bzip2 zstd python3 python3-requests python3-pil python-is-python3 zip ca-certificates
         sudo -n dkp-pacman --noconfirm -U \
           "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.2-1-any.pkg.tar.xz"
 
@@ -37,22 +37,22 @@ jobs:
         test -s SdOut/switch/GlassNXManager.nro
         cmp SdOut/glassnx/bin/uSystem/exefs.nsp SdOut/atmosphere/contents/0100000000001000/exefs.nsp
         grep -Fq '"/glassnx/bin/uMenu"' projects/uSystem/source/main.cpp
-        grep -aFq 'GlassNX v0.17' projects/uMenu/uMenu.elf
-        printf 'GlassNX v0.17\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
+        grep -aFq 'GlassNX v0.18' projects/uMenu/uMenu.elf
+        printf 'GlassNX v0.18\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
         test -s /etc/ssl/certs/ca-certificates.crt
         cp /etc/ssl/certs/ca-certificates.crt SdOut/glassnx/cacert.pem
         mkdir -p SdOut/glassnx/desktop-tools
         cp tools/glassnx_artwork.py tools/glassnx_presence.py tools/GLASSNX-INTEGRATIONS.md tools/GLASSNX-HARDWARE-QA.md SdOut/glassnx/desktop-tools/
         python3 -m py_compile tools/glassnx_artwork.py tools/glassnx_presence.py
         python3 tests/test_presence.py
-        (cd SdOut && zip -r ../GlassNX-v0.17.zip atmosphere glassnx switch)
-        unzip -t GlassNX-v0.17.zip
-        python3 tools/check_glassnx_package.py GlassNX-v0.17.zip
+        (cd SdOut && zip -r ../GlassNX-v0.18.zip atmosphere glassnx switch)
+        unzip -t GlassNX-v0.18.zip
+        python3 tools/check_glassnx_package.py GlassNX-v0.18.zip
         
     - uses: actions/upload-artifact@master
       with:
-        name: GlassNX-v0.17
-        path: GlassNX-v0.17.zip
+        name: GlassNX-v0.18
+        path: GlassNX-v0.18.zip
         if-no-files-found: error
 
   material-smoke:

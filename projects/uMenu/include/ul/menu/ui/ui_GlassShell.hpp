@@ -1,6 +1,7 @@
 #pragma once
 #include <ul/menu/ui/ui_EntryMenu.hpp>
 #include <map>
+#include <array>
 #include <memory>
 #include <ul/menu/ui/ui_ArtworkClient.hpp>
 #include <ul/menu/ui/ui_LiquidGlass.hpp>
@@ -70,6 +71,9 @@ namespace ul::menu::ui {
         void HeroShade(int x,int y,int w,int h);
         void BatteryGlyph(Renderer &r,int x,int y,int size);
         void Glyph(Renderer &r,const std::string &kind,int x,int y,int size);
+        pu::sdl2::TextureHandle::Ref SystemSymbol(const std::string &kind,bool tile);
+        std::map<std::string,pu::sdl2::TextureHandle::Ref> system_symbols;
+        unsigned symbol_budget=3;
         void IconButton(Renderer &r,int x,int y,int w,int h,const std::string &kind,const std::string &label,bool selected,std::function<void()> cb);
         void ReadRecent();
         void SaveRecent();
@@ -82,7 +86,9 @@ namespace ul::menu::ui {
         void FrameDiagnostics();
         bool diagnostics=false;
         std::chrono::steady_clock::time_point frame_tick{},frame_window{},last_diag_log{};
-        unsigned frame_count=0;
+        unsigned frame_count=0,frame_late=0;
+        std::array<unsigned,81> frame_bins{};
+        float display_p95=0,display_late=0;
         float frame_ms=0,frame_max=0,display_fps=0,display_max=0;
         std::chrono::steady_clock::time_point transition{};
         pu::sdl2::TextureHandle::Ref banner,hero_frost;

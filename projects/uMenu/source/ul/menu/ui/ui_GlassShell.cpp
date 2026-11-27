@@ -426,15 +426,20 @@ namespace ul::menu::ui {
     void GlassShell::FrameDiagnostics(){
         const auto now=std::chrono::steady_clock::now();
         if(!diagnostics){frame_tick={};last_diag_log={};return;}
-        if(frame_tick.time_since_epoch().count()==0){frame_tick=frame_window=now;frame_count=0;frame_max=0;return;}
+        if(frame_tick.time_since_epoch().count()==0){frame_tick=frame_window=now;frame_count=frame_late=0;frame_bins.fill(0);frame_max=0;return;}
         const float ms=std::chrono::duration<float,std::milli>(now-frame_tick).count();
         frame_tick=now;
-        if(ms>1000){frame_window=now;frame_count=0;frame_max=0;return;}
         ++frame_count;frame_max=std::max(frame_max,ms);
+        if(ms>18.f)++frame_late;
+        ++frame_bins[static_cast<unsigned>(std::clamp(ms,0.f,80.f))];
         const float seconds=std::chrono::duration<float>(now-frame_window).count();
-        if(seconds>=2.f){display_fps=frame_count/seconds;display_max=frame_max;frame_count=0;frame_max=0;frame_window=now;
+        if(seconds>=2.f){display_fps=frame_count/seconds;display_max=frame_max;
+            display_late=100.f*frame_late/frame_count;
+            const unsigned rank=(frame_count*95+99)/100;unsigned cumulative=0;
+            for(size_t i=0;i<frame_bins.size();++i){cumulative+=frame_bins[i];if(cumulative>=rank){display_p95=float(i+1);break;}}
+            frame_count=frame_late=0;frame_bins.fill(0);frame_max=0;frame_window=now;
             if(last_diag_log.time_since_epoch().count()==0||now-last_diag_log>=std::chrono::seconds(10)){
-                UL_LOG_INFO("GlassNX frame sample: page=%d fps=%.1f max_interval_ms=%.1f material_bytes=%lu conservative=%d",int(page),double(display_fps),double(display_max),static_cast<unsigned long>(material_bytes),int(Conservative()));
+                UL_LOG_INFO("GlassNX frame sample: page=%d fps=%.1f max_interval_ms=%.1f p95_ms_upper=%.1f late_pct=%.1f material_bytes=%lu conservative=%d",int(page),double(display_fps),double(display_max),double(display_p95),double(display_late),static_cast<unsigned long>(material_bytes),int(Conservative()));
                 last_diag_log=now;
             }
         }
@@ -442,6 +447,7 @@ namespace ul::menu::ui {
     void GlassShell::SetTheme(int index) {
         liquid_glass.Release();theme_wallpaper.reset();theme=std::clamp(index,0,3);LoadBackdrop();ClearMaterials();texts.clear();SavePreferences();
         transition=std::chrono::steady_clock::now();
+        if(!theme_wallpaper)g_MenuApplication->ShowNotification("Theme wallpaper missing. Install the GlassNX wallpaper pack at /glassnx/wallpapers.");
     }
     bool GlassShell::Favorite(u64 id) const {return std::find(favorites.begin(),favorites.end(),id)!=favorites.end();}
     void GlassShell::ToggleFavorite() {
@@ -464,6 +470,8 @@ namespace ul::menu::ui {
     void GlassShell::LoadBackdrop() {
         backdrop.clear();
         theme_wallpaper=LoadWallpaper(theme,false);
+        if(!theme_wallpaper)UL_LOG_WARN("GlassNX: theme %d wallpaper missing or invalid; using built-in fallback",theme);
+        else UL_LOG_INFO("GlassNX: theme %d loaded from SD wallpaper pack",theme);
         static const char *names[]={"PastelDream","MidnightGlass","FrostedWhite","Aurora"};
         const auto path=theme_wallpaper?std::string("sdmc:/glassnx/wallpapers/")+names[theme]+".jpg":TryFindImage("ui/Background");
         if(path.empty())return;
@@ -741,7 +749,17 @@ namespace ul::menu::ui {
         Label(r,s,x+w/2,y+(h-37)/2,30,w-24,true);
         hits.push_back({x,y,w,h,cb});
     }
+    pu::sdl2::TextureHandle::Ref GlassShell::SystemSymbol(const std::string &kind,bool tile){
+        const auto key=std::string(tile?"Icons/":"Glyphs/")+kind;
+        const auto it=system_symbols.find(key);if(it!=system_symbols.end())return it->second;
+        if(Conservative()||symbol_budget==0||system_symbols.size()>=64)return {};
+        --symbol_budget;
+        auto t=TryFindLoadImageHandle("ui/GlassNX/"+key);
+        if(!t||!t->Get())t.reset();
+        system_symbols.emplace(key,t);return t;
+    }
     void GlassShell::Glyph(Renderer &r,const std::string &kind,int x,int y,int size) {
+        if(auto t=SystemSymbol(kind,false)){Picture(r,t,x,y,size,size);return;}
         const pu::ui::Color white{246,249,255,255};
         auto arc=[&](float cx,float cy,float rad,float start,float end){
             auto rr=pu::ui::render::GetMainRenderer();
@@ -872,12 +890,15 @@ namespace ul::menu::ui {
         const int rounding=std::max(20,side/6);
         r->RenderRoundedRectangleFill({15,20,45,65},ix,iy+5,side,side,rounding);
         if(system_glyph){
+            if(auto t=SystemSymbol(system_glyph,true))Picture(r,t,ix,iy,side,side);
+            else {
             ul::glassnx::DrawSurface(r,ix,iy,side,side,rounding,{accent.r,accent.g,accent.b,180},selected);
             r->RenderRoundedRectangleFill({229,239,255,32},ix+9,iy+9,side-18,side-18,rounding-4);
             r->RenderCircleFill({22,35,72,70},ix+side/2,iy+side/2,side*33/100);
             r->RenderCircle({232,244,255,90},ix+side/2,iy+side/2,side*33/100);
             const int glyph=side*48/100;
             Glyph(r,system_glyph,ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
+            }
         } else if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
         else {Card(r,ix,iy,side,side);Glyph(r,"apps",x+w/2-34,y+h/2-55,68);}
         if(selected)r->RenderRoundedRectangle({224,236,255,225},ix-3,iy-3,side+6,side+6,rounding+3);
@@ -1031,7 +1052,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.17",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.18",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1169,7 +1190,7 @@ namespace ul::menu::ui {
         if(fill>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245},x+4,y+size/4+4,fill,height-8,std::min(4,fill/2));
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
-        hits.clear();icon_budget=true;material_budget=2;
+        hits.clear();icon_budget=true;material_budget=2;symbol_budget=3;
         const bool conservative=Conservative();
         if(conservative!=last_conservative){
             last_conservative=conservative;PrepareTransition();
@@ -1187,7 +1208,7 @@ namespace ul::menu::ui {
         if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.17 · SAFE":"v0.17",130,76,27);
+        Label(r,safe_mode?"v0.18 · SAFE":"v0.18",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -1204,7 +1225,7 @@ namespace ul::menu::ui {
         BatteryGlyph(r,1805,40,38);
         hits.push_back({1470,25,380,80,[this](){SetPage(Page::Control);}});
         if(diagnostics){
-            char stats[90]={};snprintf(stats,sizeof(stats),"%.1f FPS | max %.1f ms",display_fps,display_max);
+            char stats[90]={};snprintf(stats,sizeof(stats),"%.1f FPS | %.0f%% late",display_fps,display_late);
             r->RenderRoundedRectangleFill({16,22,45,215},1420,102,430,45,18);
             Label(r,stats,1435,107,27,400);
         }
