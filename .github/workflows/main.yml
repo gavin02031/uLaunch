@@ -37,22 +37,22 @@ jobs:
         test -s SdOut/switch/GlassNXManager.nro
         cmp SdOut/glassnx/bin/uSystem/exefs.nsp SdOut/atmosphere/contents/0100000000001000/exefs.nsp
         grep -Fq '"/glassnx/bin/uMenu"' projects/uSystem/source/main.cpp
-        grep -aFq 'GlassNX v0.20' projects/uMenu/uMenu.elf
-        printf 'GlassNX v0.20\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
+        grep -aFq 'GlassNX v0.21' projects/uMenu/uMenu.elf
+        printf 'GlassNX v0.21\nCommit: %s\n' "$GITHUB_SHA" > SdOut/glassnx/BUILD.txt
         test -s /etc/ssl/certs/ca-certificates.crt
         cp /etc/ssl/certs/ca-certificates.crt SdOut/glassnx/cacert.pem
         mkdir -p SdOut/glassnx/desktop-tools
         cp tools/glassnx_artwork.py tools/glassnx_presence.py tools/GLASSNX-INTEGRATIONS.md tools/GLASSNX-HARDWARE-QA.md SdOut/glassnx/desktop-tools/
         python3 -m py_compile tools/glassnx_artwork.py tools/glassnx_presence.py
         python3 tests/test_presence.py
-        (cd SdOut && zip -r ../GlassNX-v0.20.zip atmosphere glassnx switch)
-        unzip -t GlassNX-v0.20.zip
-        python3 tools/check_glassnx_package.py GlassNX-v0.20.zip
+        (cd SdOut && zip -r ../GlassNX-v0.21.zip atmosphere glassnx switch)
+        unzip -t GlassNX-v0.21.zip
+        python3 tools/check_glassnx_package.py GlassNX-v0.21.zip
         
     - uses: actions/upload-artifact@master
       with:
-        name: GlassNX-v0.20
-        path: GlassNX-v0.20.zip
+        name: GlassNX-v0.21
+        path: GlassNX-v0.21.zip
         if-no-files-found: error
 
   material-smoke:
