@@ -106,3 +106,6 @@ The featured card now has a smaller rounded glass information panel, lighter tin
 
 ### Artwork follow-up
 Strictly filter cover searches, response metadata and decoded images to original 512×512 or 1024×1024 square images. Native 512 covers remain 512; 1024 covers produce a 512 active tile and optional 1024 copy, without upscaling. Landscape hero sources must support the existing 1130×405 center crop without enlargement. Larger previews and Previous/Next navigation are added. Artwork tests are now part of host CI. Existing custom assets are preserved until replaced. Device validation pending.
+
+## Artwork Studio
+Dedicated fullscreen gallery for per-title SteamGridDB game matching, previous/next preview and apply. Uses one normalized surface and one preview texture, no background requests. Preserves original square-size filters and 1130×405 hero crop. Input remains on the gallery until exit, and transitions/Safe Mode clear its resources. Network requests remain synchronous, bounded and explicit; the initial artwork options and API keyboard remain dialogs. Requires native compile and console testing.

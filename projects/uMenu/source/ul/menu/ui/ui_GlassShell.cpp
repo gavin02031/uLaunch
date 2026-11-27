@@ -52,6 +52,7 @@ namespace ul::menu::ui {
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
+        CloseGallery();
         liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();banner_checked=false;
         theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
@@ -178,81 +179,132 @@ namespace ul::menu::ui {
         if(key)fclose(key);
         else if(!SetArtworkKey())return;
         PrepareTransition();
-        std::string error;
-        std::vector<art::ArtworkGame> games;
-        if(!art::FindArtworkGames(name,games,error)){
-            g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);return;
+        gallery.active=true;gallery.hero=hero;gallery.id=id;gallery.title=name;
+        if(!art::FindArtworkGames(name,gallery.games,gallery.error))gallery.games.clear();
+        hits.clear();touched=true;
+    }
+    void GlassShell::CloseGallery(){
+        if(!gallery.active)return;
+        gallery=ArtworkGallery{};
+        hits.clear();touched=true;
+    }
+    void GlassShell::GalleryMove(int delta){
+        const size_t n=gallery.matching?gallery.games.size():gallery.pictures.size();
+        if(n==0)return;
+        gallery.index=(gallery.index+n+(delta<0?n-1:1))%n;
+        if(!gallery.matching)GalleryPreview();
+    }
+    void GlassShell::GalleryPreview(){
+        gallery.image.reset();gallery.preview.reset();gallery.error.clear();
+        if(Conservative()||gallery.index>=gallery.pictures.size())return;
+        std::string data;
+        if(!art::DownloadPicture(gallery.pictures[gallery.index],gallery.hero,data,gallery.error))return;
+        auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
+        auto source=rw?IMG_Load_RW(rw,1):nullptr;
+        const bool valid=source&&(gallery.hero?ul::glassnx::IsHeroSource(source->w,source->h):ul::glassnx::IsSquareCover(source->w,source->h));
+        SDL_Surface *normalized=nullptr;
+        if(valid)normalized=ul::glassnx::NormalizeArtwork(source,gallery.hero,source->w==1024?1024:512,gallery.error);
+        else gallery.error="Artwork does not meet the required dimensions.";
+        if(source)SDL_FreeSurface(source);
+        if(!normalized)return;
+        gallery.image=std::shared_ptr<SDL_Surface>(normalized,SDL_FreeSurface);
+        // Only one full source and one bounded preview reside in memory.
+        const float scale=std::min(960.f/normalized->w,600.f/normalized->h);
+        auto small=SDL_CreateRGBSurfaceWithFormat(0,std::max(1,int(normalized->w*scale)),std::max(1,int(normalized->h*scale)),32,SDL_PIXELFORMAT_RGBA32);
+        SDL_Texture *tex=nullptr;
+        if(small&&SDL_BlitScaled(normalized,nullptr,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
+        if(small)SDL_FreeSurface(small);
+        if(tex)gallery.preview=pu::sdl2::TextureHandle::New(tex);
+        else {gallery.image.reset();gallery.error="Unable to create preview.";}
+    }
+    void GlassShell::GallerySelect(){
+        if(Conservative()){CloseGallery();return;}
+        if(gallery.matching){
+            if(gallery.index>=gallery.games.size())return;
+            gallery.error.clear();
+            if(!art::FindPictures(gallery.games[gallery.index].id,gallery.hero,gallery.pictures,gallery.error))return;
+            gallery.matching=false;gallery.index=0;GalleryPreview();return;
         }
-        // One readable match per card avoids long game titles as tiny buttons.
-        size_t game_page=0;int game=-1;
-        while(game<0){
-            const auto detail=name+"\n\n"+games[game_page].name+"\nMatch "+std::to_string(game_page+1)+" of "+std::to_string(games.size());
-            const int chosen=g_MenuApplication->DisplayDialog("Find your game",detail,{"Use this game","Next match","Cancel"},true);
-            if(chosen==0)game=int(game_page);
-            else if(chosen==1)game_page=(game_page+1)%games.size();
-            else return;
-        }
-        std::vector<art::ArtworkHero> pictures;
-        if(!art::FindPictures(games[game].id,hero,pictures,error)){
-            g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);return;
-        }
-        size_t i=0;
-        while(i<pictures.size()){
-            std::string data;
-            if(!art::DownloadPicture(pictures[i],hero,data,error)){
-                if(g_MenuApplication->DisplayDialog("Artwork unavailable",error,{"Next image","Cancel"},true)!=0)return;
-                ++i;continue;
-            }
-            // Decode only the bounded response, and render a small preview.
-            auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
-            auto image=rw?IMG_Load_RW(rw,1):nullptr;
-            const bool valid=image&&(hero?ul::glassnx::IsHeroSource(image->w,image->h):ul::glassnx::IsSquareCover(image->w,image->h));
-            const int source_w=image?image->w:0,source_h=image?image->h:0;
-            const int cover_size=source_w==1024?1024:512;
-            auto normalized=valid?ul::glassnx::NormalizeArtwork(image,hero,cover_size,error):nullptr;
-            if(!valid)error=hero?"Choose a compatible landscape hero.":"Choose an original 512 x 512 or 1024 x 1024 square image.";
-            if(image)SDL_FreeSurface(image);
-            if(!normalized){
-                if(g_MenuApplication->DisplayDialog("Choose sharper artwork",error,{"Next artwork","Cancel"},true)!=0)return;
-                ++i;continue;
-            }
-            image=normalized;
-            const float scale=std::min(520.f/image->w,320.f/image->h);
-            auto small=SDL_CreateRGBSurfaceWithFormat(0,std::max(1,int(image->w*scale)),std::max(1,int(image->h*scale)),32,SDL_PIXELFORMAT_RGBA32);
-            SDL_Texture *tex=nullptr;
-            if(small&&SDL_BlitScaled(image,nullptr,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
-            if(small)SDL_FreeSurface(small);
-            if(!tex){SDL_FreeSurface(image);++i;continue;}
-            auto preview=pu::sdl2::TextureHandle::New(tex);
-            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size())+" • "+(hero?"Hero":"Cover")+"\nSource: "+std::to_string(source_w)+" x "+std::to_string(source_h)+"\n"+(hero?"Center crop • 226:81 • 1130 x 405":cover_size==1024?"Square • 512 + 1024":"Square • 512 x 512"),{"Apply","Next","Previous","Cancel"},true,preview);
-            if(pick==1||pick==2){SDL_FreeSurface(image);i=pick==1?(i+1)%pictures.size():(i+pictures.size()-1)%pictures.size();continue;}
-            if(pick!=0){SDL_FreeSurface(image);return;}
-            bool saved=false;
-            if(!Conservative()) {
-                if(hero)saved=ul::glassnx::ExportArtwork(image,root+".hero",error);
-                else {
-                    auto tile=ul::glassnx::NormalizeArtwork(image,false,512,error);
-                    if(tile){
-                        // Publish the active tile first. The high-resolution copy is optional.
-                        saved=ul::glassnx::ExportArtwork(tile,root+".cover",error);
-                        if(saved){
-                            if(cover_size==1024){
-                                std::string optional_error;
-                                if(!ul::glassnx::ExportArtwork(image,root+".cover1024",optional_error))remove((root+".cover1024").c_str());
-                            }else remove((root+".cover1024").c_str());
-                        }
-                        SDL_FreeSurface(tile);
-                    }
+        if(!gallery.image){GalleryPreview();return;}
+        char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(gallery.id));
+        const std::string root=std::string("sdmc:/glassnx/art/")+hex;
+        bool saved=false;
+        if(gallery.hero)saved=ul::glassnx::ExportArtwork(gallery.image.get(),root+".hero",gallery.error);
+        else{
+            auto tile=ul::glassnx::NormalizeArtwork(gallery.image.get(),false,512,gallery.error);
+            if(tile){
+                saved=ul::glassnx::ExportArtwork(tile,root+".cover",gallery.error);
+                SDL_FreeSurface(tile);
+                if(saved){
+                    std::string optional_error;
+                    if(gallery.image->w!=1024||!ul::glassnx::ExportArtwork(gallery.image.get(),root+".cover1024",optional_error))
+                        remove((root+".cover1024").c_str());
                 }
-            } else error="Close the running game before applying artwork.";
-            SDL_FreeSurface(image);
-            if(saved){
-                custom_icons.erase(id);banner.reset();banner_checked=false;
-                g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Square cover applied");
-            } else g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);
-            return;
+            }
         }
-        g_MenuApplication->ShowNotification("No more matching artwork");
+        if(saved){
+            const auto id=gallery.id;const bool hero=gallery.hero;
+            CloseGallery();custom_icons.erase(id);banner.reset();banner_checked=false;
+            g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Square cover applied");
+        }
+    }
+    void GlassShell::GalleryInput(u64 down,pu::ui::TouchPoint touch){
+        if(Conservative()||(down&HidNpadButton_B)){CloseGallery();return;}
+        if(touch.IsEmpty())touched=false;
+        else if(!touched){
+            touched=true;
+            for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)){
+                auto action=hit.action;action();return;
+            }
+        }
+        if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft|HidNpadButton_L))GalleryMove(-1);
+        else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight|HidNpadButton_R))GalleryMove(1);
+        else if(down&HidNpadButton_A)GallerySelect();
+    }
+    void GlassShell::RenderGallery(Renderer &r){
+        r->RenderRectangleFill({13,20,40,125},0,0,1920,1080);
+        Card(r,64,38,1792,104);
+        Glyph(r,"album",100,65,48);Label(r,"Artwork Studio",170,61,45);
+        Label(r,"SteamGridDB",1470,71,30,320);
+        Label(r,gallery.title,78,173,45,1720);
+        Label(r,gallery.matching?"Choose the matching game":gallery.hero?"Hero banners":"Square game covers",80,235,30);
+        if(gallery.matching){
+            Card(r,240,325,1440,440);
+            if(!gallery.games.empty()){
+                Label(r,"MATCH "+std::to_string(gallery.index+1)+" / "+std::to_string(gallery.games.size()),960,383,30,0,true);
+                Label(r,gallery.games[gallery.index].name,960,475,64,1280,true);
+                Label(r,"Confirm the title before browsing artwork.",960,590,30,1200,true);
+            }
+        }else{
+            Card(r,72,300,1120,620);
+            if(gallery.preview){
+                int w=0,h=0;SDL_QueryTexture(gallery.preview->Get(),nullptr,nullptr,&w,&h);
+                if(w>0&&h>0){
+                    const float scale=std::min(1050.f/w,580.f/h);
+                    const int dw=int(w*scale),dh=int(h*scale);
+                    RoundedArt(r,gallery.preview,632-dw/2,610-dh/2,dw,dh,36);
+                }
+            }else Label(r,"Preview unavailable",632,560,45,1000,true);
+            Card(r,1220,300,630,620);
+            Label(r,"ARTWORK "+std::to_string(gallery.index+1)+" / "+std::to_string(gallery.pictures.size()),1260,345,30,550);
+            Label(r,gallery.hero?"Cinematic hero":"Original square",1260,405,45,550);
+            if(gallery.index<gallery.pictures.size()){
+                const auto &p=gallery.pictures[gallery.index];
+                Label(r,"Source",1260,490,30);
+                Label(r,std::to_string(p.width)+" × "+std::to_string(p.height),1260,535,37,540);
+            }
+            Label(r,"GlassNX output",1260,610,30);
+            Label(r,gallery.hero?"1130 × 405":gallery.image&&gallery.image->w==1024?"512 + 1024 square":"512 × 512",1260,655,37,550);
+            Label(r,"Original game data is unchanged.",1260,775,27,550);
+        }
+        if(!gallery.error.empty()){
+            r->RenderRoundedRectangleFill({105,47,69,235},110,795,1700,92,30);
+            Label(r,gallery.error,140,825,30,1640);
+        }
+        Button(r,78,960,250,82,"B  Back",false,[this](){CloseGallery();});
+        Button(r,375,960,295,82,"L  Previous",false,[this](){GalleryMove(-1);});
+        Button(r,700,960,520,82,gallery.matching?"A  Choose game":gallery.image?"A  Apply artwork":"A  Retry preview",true,[this](){GallerySelect();});
+        Button(r,1250,960,295,82,"R  Next",false,[this](){GalleryMove(1);});
     }
     pu::sdl2::TextureHandle::Ref GlassShell::CustomIcon(u64 id){
         if(Conservative())return {};
@@ -1002,6 +1054,7 @@ namespace ul::menu::ui {
         }
     }
     void GlassShell::HandleInput(u64 down,pu::ui::TouchPoint touch) {
+        if(gallery.active){GalleryInput(down,touch);return;}
         if(touch.IsEmpty()) {
             touched=false;drag_slider=-1;
         } else if(touched && drag_slider>=0 && page==Page::Control) {
@@ -1098,6 +1151,7 @@ namespace ul::menu::ui {
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
         Picture(r,ActiveWallpaper(),0,0,1920,1080);
         const auto scrim=WallpaperTint();if(scrim.a)r->RenderRectangleFill(scrim,0,0,1920,1080);
+        if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
         Label(r,safe_mode?"v0.16 · SAFE":"v0.16",130,76,27);

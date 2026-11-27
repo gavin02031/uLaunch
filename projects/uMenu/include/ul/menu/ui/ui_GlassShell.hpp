@@ -1,6 +1,8 @@
 #pragma once
 #include <ul/menu/ui/ui_EntryMenu.hpp>
 #include <map>
+#include <memory>
+#include <ul/menu/ui/ui_ArtworkClient.hpp>
 #include <ul/menu/ui/ui_LiquidGlass.hpp>
 
 namespace ul::menu::ui {
@@ -47,6 +49,22 @@ namespace ul::menu::ui {
         void TitleOptions();
         bool SetArtworkKey();
         void EditArtwork(u64 id,const std::string &name);
+        struct ArtworkGallery {
+            bool active=false,hero=false,matching=true;
+            u64 id=0;
+            size_t index=0;
+            std::string title,error;
+            std::vector<art::ArtworkGame> games;
+            std::vector<art::ArtworkHero> pictures;
+            std::shared_ptr<SDL_Surface> image;
+            pu::sdl2::TextureHandle::Ref preview;
+        } gallery;
+        void CloseGallery();
+        void GalleryInput(u64 down,pu::ui::TouchPoint touch);
+        void RenderGallery(Renderer &r);
+        void GalleryMove(int delta);
+        void GallerySelect();
+        void GalleryPreview();
         pu::sdl2::TextureHandle::Ref CustomIcon(u64 id);
         std::map<u64,pu::sdl2::TextureHandle::Ref> custom_icons;
         void HeroShade(int x,int y,int w,int h);
@@ -125,7 +143,7 @@ namespace ul::menu::ui {
         s32 GetHeight() override {return 1080;}
         void RecordLaunch(u64 id);
         void PrepareTransition();
-        void Invalidate() {focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();banner_checked=false;}
+        void Invalidate() {CloseGallery();focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}
