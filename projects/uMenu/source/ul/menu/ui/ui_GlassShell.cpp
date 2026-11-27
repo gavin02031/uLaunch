@@ -55,7 +55,7 @@ namespace ul::menu::ui {
     void GlassShell::PrepareTransition(){
         CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;
         liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;
-        theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
+        theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;dock_lift.fill(0);dock_velocity.fill(0);
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
     }
     void GlassShell::ToggleEnhancedGlass(){
@@ -98,7 +98,8 @@ namespace ul::menu::ui {
         const int p=static_cast<int>(page);
         const float target=p<4?float(p):float(std::clamp(static_cast<int>(previous),0,3));
         if(animated_focus!=focus){animated_focus=focus;focus_lift=0;focus_velocity=0;}
-        if(!motion||Conservative()){nav_position=target;nav_velocity=0;focus_lift=0;focus_velocity=0;return;}
+        if(!motion||Conservative()){nav_position=target;nav_velocity=0;focus_lift=0;focus_velocity=0;dock_lift.fill(0);dock_velocity.fill(0);return;}
+        for(int i=0;i<5;i++)dock_lift[i]=std::clamp(StepSpring(dock_lift[i],dock_velocity[i],page==Page::Home&&dock_focus==i?1.f:0.f,dt),0.f,1.f);
         nav_position=StepSpring(nav_position,nav_velocity,target,dt);
         focus_lift=StepSpring(focus_lift,focus_velocity,1.f,dt);
     }
@@ -119,6 +120,8 @@ namespace ul::menu::ui {
         const char *PrefsPath() {
             return g_GlobalSettings.ams_is_emummc?"sdmc:/glassnx/glassnx-emu.prefs":"sdmc:/glassnx/glassnx-sys.prefs";
         }
+        constexpr const char *DockShortcutNames[]={"Album","Search","Apps","Library","Lock"};
+        constexpr const char *DockShortcutIcons[]={"album","search","apps","games","lock"};
         std::string Fold(std::string v) {
             for(auto &c:v)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             return v;
@@ -385,6 +388,8 @@ namespace ul::menu::ui {
         if(fscanf(fp,"GlassNX %d %d %d %d %d %d %u",&version,&t,&g,&b,&m,&sort,&count)==7 && version==1 && count<=512) {
             theme=std::clamp(t,0,3);glass=std::clamp(g,35,85);blur=std::clamp(b,0,100);motion=m!=0;sort_name=sort!=0;
             for(unsigned i=0;i<count;i++){unsigned long long id=0;if(fscanf(fp,"%llx",&id)!=1)break;if(id)favorites.push_back(static_cast<u64>(id));}
+            // Optional trailing field keeps the v1 preference format backwards compatible.
+            int shortcut=0;if(fscanf(fp," Dock %d",&shortcut)==1 && shortcut>=0&&shortcut<5)dock_shortcut=shortcut;
         }
         fclose(fp);
     }
@@ -393,6 +398,7 @@ namespace ul::menu::ui {
         auto fp=fopen(temp.c_str(),"wb");if(!fp){g_MenuApplication->ShowNotification("Could not save appearance settings");return;}
         bool ok=fprintf(fp,"GlassNX 1 %d %d %d %d %d %u\n",theme,glass,blur,int(motion),int(sort_name),static_cast<unsigned>(favorites.size()))>0;
         for(auto id:favorites)if(fprintf(fp,"%016llx\n",static_cast<unsigned long long>(id))<0)ok=false;
+        if(fprintf(fp,"Dock %d\n",dock_shortcut)<0)ok=false;
         if(fclose(fp)!=0)ok=false;
         if(ok && rename(temp.c_str(),PrefsPath())==0)return;
         remove(temp.c_str());g_MenuApplication->ShowNotification("Could not save appearance settings");
@@ -458,9 +464,17 @@ namespace ul::menu::ui {
         else if(favorites.size()<512){favorites.push_back(e.app_info.app_id);g_MenuApplication->ShowNotification("Added to favorites");}
         SavePreferences();
     }
+    void GlassShell::CycleDockShortcut(){
+        dock_shortcut=(dock_shortcut+1)%5;SavePreferences();
+    }
+    void GlassShell::ApplySearch(const std::string &query){
+        // HOME search spans all entries in the current folder; never recurse the SD card.
+        if(page==Page::Home){SetPage(Page::Library);filter=4;}
+        search=query;focus=offset=0;
+    }
     void GlassShell::Search() {
         if(safe_mode){NativeSearch(search);return;}
-        keyboard_draft=search;keyboard_shift=false;key_focus=10;
+        keyboard_draft=search;keyboard_shift=false;keyboard_symbols=false;key_focus=10;
         keyboard_open=true;hits.clear();touched=true;
     }
     void GlassShell::NativeSearch(const std::string &initial) {
@@ -470,10 +484,11 @@ namespace ul::menu::ui {
         swkbdConfigSetGuideText(&cfg,"Search your library");
         swkbdConfigSetInitialText(&cfg,initial.c_str());
         char result[128]={};auto rc=ShowSwkbd(&cfg,result,sizeof(result));swkbdClose(&cfg);
-        if(R_SUCCEEDED(rc)){search=result;focus=offset=0;}
+        if(R_SUCCEEDED(rc))ApplySearch(result);
     }
     namespace {
         constexpr const char *KeyboardRows[]={"1234567890","qwertyuiop","asdfghjkl'","zxcvbnm,.-"};
+        constexpr const char *KeyboardSymbolRows[]={"1234567890","!@#$%^&*()","[]{}<>+=_-",":;\"'/?\\|,."};
         constexpr const char *KeyboardActions[]={"Shift","Space","Delete","Clear","Search"};
         void EraseCharacter(std::string &value){
             if(value.empty())return;
@@ -483,14 +498,14 @@ namespace ul::menu::ui {
         }
     }
     void GlassShell::FinishKeyboard(bool apply){
-        if(apply){search=keyboard_draft;focus=offset=0;}
+        if(apply){const auto query=keyboard_draft;ApplySearch(query);}
         keyboard_open=false;keyboard_draft.clear();hits.clear();touched=true;
     }
     void GlassShell::KeyboardKey(int key){
         if(key<0||key>=45)return;
         key_focus=key;
         if(key<40){
-            char ch=KeyboardRows[key/10][key%10];
+            char ch=(keyboard_symbols?KeyboardSymbolRows:KeyboardRows)[key/10][key%10];
             if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
             if(keyboard_draft.size()<127)keyboard_draft+=ch;
         }else switch(key){
@@ -507,6 +522,7 @@ namespace ul::menu::ui {
         if(down&HidNpadButton_X){const auto initial=keyboard_draft;FinishKeyboard(false);NativeSearch(initial);return;}
         if(down&HidNpadButton_Y){EraseCharacter(keyboard_draft);return;}
         if(down&HidNpadButton_L){keyboard_shift=!keyboard_shift;return;}
+        if(down&HidNpadButton_R){keyboard_symbols=!keyboard_symbols;return;}
         if(touch.IsEmpty())touched=false;
         else if(!touched){
             touched=true;
@@ -530,7 +546,8 @@ namespace ul::menu::ui {
         Card(r,115,155,1690,845);
         // Legible under all four wallpapers, independent of experimental GPU targets.
         ul::glassnx::DrawSurface(r,135,175,1650,805,48,{19,30,56,178});
-        Glyph(r,"search",178,209,42);Label(r,"Search your library",238,201,45,1200);
+        Glyph(r,"search",178,209,42);Label(r,page==Page::Home||filter==4?"Search games & apps":"Search your library",238,201,45,950);
+        Button(r,1180,192,235,74,keyboard_symbols?"ABC":"Symbols",false,[this](){keyboard_symbols=!keyboard_symbols;});
         Label(r,"B  Cancel",1490,218,30,260);
         hits.push_back({1450,188,300,84,[this](){FinishKeyboard(false);}});
         ul::glassnx::DrawSurface(r,175,278,1570,105,32,{13,23,48,200});
@@ -546,11 +563,11 @@ namespace ul::menu::ui {
             r->RenderRoundedRectangle({230,239,255,static_cast<u8>(selected?230:90)},x,y,w,78,20);
             std::string key;
             if(action)key=KeyboardActions[i-40];
-            else {char ch=KeyboardRows[i/10][i%10];if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));key=std::string(1,ch);}
+            else {char ch=(keyboard_symbols?KeyboardSymbolRows:KeyboardRows)[i/10][i%10];if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));key=std::string(1,ch);}
             Label(r,key,x+w/2,y+19,37,w-14,true);
             hits.push_back({x,y,w,78,[this,i](){KeyboardKey(i);}});
         }
-        Label(r,"A  Type     Y  Delete     L  Shift     +  Search     X  System keyboard",960,900,27,1510,true);
+        Label(r,"A Type   Y Delete   L Shift   R Symbols   + Search   X System keyboard",960,900,27,1510,true);
     }
     void GlassShell::OpenCloseSheet(){
         if(!g_GlobalSettings.IsSuspended())return;
@@ -592,7 +609,14 @@ namespace ul::menu::ui {
         switch(index){
             case 0:SetPage(Page::Notifications);break;
             case 1:SetPage(Page::Control);break;
-            case 2:ShowAlbum();break;
+            case 2:
+                switch(dock_shortcut){
+                    case 1:Search();break;
+                    case 2:SetPage(Page::Apps);break;
+                    case 3:SetPage(Page::Library);break;
+                    case 4:g_MenuApplication->LoadMenu(MenuType::Lockscreen);break;
+                    default:ShowAlbum();break;
+                }break;
             case 3:SetPage(Page::Settings);break;
             case 4:ShowPowerDialog();break;
         }
@@ -601,21 +625,23 @@ namespace ul::menu::ui {
         // Shared lens with icon-first shortcuts, a restrained raised selection,
         // and a detached silhouette. No additional full-screen render target.
         Card(r,370,920,1180,132);
-        ul::glassnx::DrawSurface(r,370,920,1180,132,58,{36,49,89,78});
-        constexpr const char *icons[]={"bell","sun","album","settings","power"};
-        constexpr const char *names[]={"Alerts","Control","Album","Settings","Power"};
+        // A second subtle edge, not another opaque card over the material.
+        r->RenderRoundedRectangle({238,248,255,95},374,924,1172,124,50);
+        const char *icons[]={"bell","sun",DockShortcutIcons[dock_shortcut],"settings","power"};
+        const char *names[]={"Alerts","Control",DockShortcutNames[dock_shortcut],"Settings","Power"};
         for(int i=0;i<5;i++){
             const int x=390+i*230;
             if(dock_focus==i)ul::glassnx::DrawSurface(r,x,931,220,110,42,{146,170,230,130},true);
             const bool selected=dock_focus==i;
-            const int side=selected?76:68,ix=x+110-side/2,iy=932-(selected?3:0);
+            const float lift=motion&&!Conservative()?dock_lift[i]:(selected?1.f:0.f);
+            const int side=68+int(22*lift),ix=x+110-side/2,iy=932-int(15*lift);
             if(auto tile=SystemSymbol(icons[i],true))Picture(r,tile,ix,iy,side,side);
             else {
                 ul::glassnx::DrawSurface(r,ix,iy,side,side,20,{100,135,198,172},selected);
                 const int glyph=side/2;
                 Glyph(r,icons[i],ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
             }
-            Label(r,names[i],x+110,1007,27,208,true);
+            Label(r,names[i],x+110,1009,27,208,true);
             hits.push_back({x,928,220,116,[this,i](){ActivateDock(i);}});
         }
         const auto alerts=g_MenuApplication->GetNotificationHistory().size();
@@ -747,6 +773,7 @@ namespace ul::menu::ui {
                 if(it!=title_categories.end())utility=it->second==2;
             }
             const bool game=e.Is<EntryType::Application>()&&!utility;
+            if(page==Page::Library&&filter==4){result.push_back(i);continue;}
             if(page==Page::Apps) {
                 if((filter==0 && (e.Is<EntryType::Homebrew>()||e.IsSpecial()||utility)) ||
                     (filter==1 && e.Is<EntryType::Homebrew>()) ||
@@ -1070,6 +1097,7 @@ namespace ul::menu::ui {
             dock_focus=-1;
             const auto list=List();const auto it=std::find(list.begin(),list.end(),index);
             if(it==list.end())return;
+            dock_focus=-1;
             const int next=static_cast<int>(it-list.begin());
             if(next!=focus){focus=next;return;}
             launch(index);
@@ -1184,7 +1212,8 @@ namespace ul::menu::ui {
                     case 2:
                         row("Controllers","Connect, update or remap",[](){ShowController();});
                         row("Touchscreen","Tap items to navigate",noop);
-                        row("Controller navigation","L/R pages, ZL/ZR Control Center",noop);break;
+                        row("Controller navigation","L/R pages, ZL/ZR Control Center",noop);
+                        row("Dock center shortcut",std::string(DockShortcutNames[dock_shortcut])+"  ·  A to change",[this](){CycleDockShortcut();});break;
                     case 3:
                         row("Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);});
                         row("Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);});
@@ -1219,7 +1248,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.19",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.20",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1311,6 +1340,8 @@ namespace ul::menu::ui {
         if(down&HidNpadButton_L){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+3)%4));return;}
         if(down&HidNpadButton_R){int p=static_cast<int>(page);SetPage(static_cast<Page>(p>=4?0:(p+1)%4));return;}
         if(down&HidNpadButton_Y){
+            if(page==Page::Home){dock_focus=-1;Search();return;}
+            if(page==Page::Notifications){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());return;}
             if(page==Page::Settings){Section((setting_section+1)%8);return;}
             if(page==Page::Library || page==Page::Apps){filter=(filter+1)%4;focus=0;offset=0;}return;
         }
@@ -1325,6 +1356,7 @@ namespace ul::menu::ui {
                 if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft)){dock_focus=std::max(0,dock_focus-1);return;}
                 if(down&(HidNpadButton_Right|HidNpadButton_StickLRight)){dock_focus=std::min(4,dock_focus+1);return;}
                 if(down&HidNpadButton_A){ActivateDock(dock_focus);return;}
+                if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))return;
             }else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){dock_focus=0;return;}
         }
         if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){ToggleFavorite();return;}
@@ -1385,7 +1417,7 @@ namespace ul::menu::ui {
         if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.19 · SAFE":"v0.19",130,76,27);
+        Label(r,safe_mode?"v0.20 · SAFE":"v0.20",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -1471,7 +1503,8 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
-            Label(r,"R Stick  Options   ·   ↓ Dock",385,606,27,670);
+            Label(r,"R Stick Options   ·   ↓ Dock",385,606,27,570);
+            IconButton(r,1000,590,240,52,"search","Y Search",false,[this](){dock_focus=-1;Search();});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,250,dock_focus<0&&focus==offset+i);
@@ -1482,8 +1515,9 @@ namespace ul::menu::ui {
             const bool games=page==Page::Library;
             const int capacity=games?10:12;
             auto list=List();focus=std::clamp(focus,0,std::max(0,static_cast<int>(list.size())-1));offset=(focus/capacity)*capacity;
-            Label(r,games?"Game Library":"App Library",70,125,64);
-            Label(r,games?"Your collection":"Homebrew, media and utilities",72,208,30);
+            const bool all_entries=games&&filter==4;
+            Label(r,all_entries?"Search results":games?"Game Library":"App Library",70,125,64);
+            Label(r,all_entries?std::to_string(list.size())+" matches in this folder":games?"Your collection":"Homebrew, media and utilities",72,208,30);
             IconButton(r,1410,145,435,76,"search",search.empty()?"Search":search,false,[this](){Search();});
             const char *gameTabs[]={"All Games","Favorites","Collections","Recently Played"};
             const char *appTabs[]={"Apps","Homebrew","Tools","Media"};
@@ -1492,7 +1526,11 @@ namespace ul::menu::ui {
             if(games) {
                 Card(r,40,275,340,680);
                 const char *icons[]={"games","star","storage","clock"};
-                for(int i=0;i<4;i++)Segment(r,55,310+i*95,310,72,icons[i],gameTabs[i],filter==i,[this,i](){filter=i;focus=offset=0;});
+                if(all_entries){
+                    Glyph(r,"search",70,320,44);Label(r,"All entries",125,320,30,230);
+                    Label(r,"Games, apps",70,400,30,285);Label(r,"and folders",70,440,30,285);
+                    Button(r,55,535,310,75,"Clear search",false,[this](){filter=0;search.clear();focus=offset=0;});
+                }else for(int i=0;i<4;i++)Segment(r,55,310+i*95,310,72,icons[i],gameTabs[i],filter==i,[this,i](){filter=i;focus=offset=0;});
                 Label(r,"Sort collection",75,785,27);
                 Button(r,60,835,300,75,sort_name?"A–Z":"Default order",false,[this](){sort_name=!sort_name;focus=offset=0;SavePreferences();});
             } else Card(r,70,375,1775,580);
@@ -1511,6 +1549,11 @@ namespace ul::menu::ui {
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
             Label(r,settings?"Settings":control?"Control Center":"Notifications",70,137,64);
+            if(!settings&&!control){
+                const bool quiet=g_MenuApplication->IsQuietMode();
+                IconButton(r,1420,140,400,76,"moon",quiet?"Quiet on":"Quiet off",quiet,[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());});
+                Label(r,"Y  Toggle quiet mode",1430,218,27,385);
+            }
             if(settings) {
                 Card(r,70,210,360,760);
                 const char *sections[]={"Appearance","System","Controls","Network","Power","Storage","Homebrew","About"};
@@ -1549,6 +1592,7 @@ namespace ul::menu::ui {
                     Glyph(r,"bell",926,315,68);
                     Label(r,"You're all caught up.",960,415,45,0,true);
                     Label(r,"System alerts will appear here.",960,485,30,0,true);
+                    if(g_MenuApplication->IsQuietMode())Label(r,"Quiet mode is enabled",960,535,27,0,true);
                 }
                 const int total=static_cast<int>(history.size());
                 alert_offset=std::clamp(alert_offset,0,std::max(0,total-4));

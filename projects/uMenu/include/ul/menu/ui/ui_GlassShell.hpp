@@ -101,6 +101,11 @@ namespace ul::menu::ui {
         void NativeSearch(const std::string &initial);
         bool keyboard_open=false,keyboard_shift=false,close_sheet=false;
         int key_focus=0,close_focus=0,dock_focus=-1;
+        bool keyboard_symbols=false;
+        std::array<float,5> dock_lift{},dock_velocity{};
+        int dock_shortcut=0;
+        void ApplySearch(const std::string &query);
+        void CycleDockShortcut();
         std::string keyboard_draft;
         void RenderKeyboard(Renderer &r);
         void KeyboardInput(u64 down,pu::ui::TouchPoint touch);
