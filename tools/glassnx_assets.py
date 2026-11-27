@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GlassNX v0.1: deterministic offline glass assets; preserves upstream texture sizes."""
+"""GlassNX v0.9: deterministic offline glass assets; preserves upstream texture sizes."""
 import math
 import struct
 import sys
@@ -37,9 +37,9 @@ def wallpaper(x,y,w,h):
     pink=math.exp(-((u-.11)**2*10+(v-.78)**2*6))
     blue=math.exp(-((u-.89)**2*9+(v-.26)**2*6))
     violet=math.exp(-((u-.47)**2*7+(v-.11)**2*8))
-    r=39+65*pink+25*violet+13*blue
-    g=41+25*pink+22*violet+58*blue
-    b=85+36*pink+60*violet+62*blue
+    r=100+105*pink+40*violet+4*blue
+    g=102+27*pink+15*violet+60*blue
+    b=174+22*pink+34*violet+54*blue
     # Overlapping curved, translucent sheets with a directional specular seam.
     for i in range(3):
         center=(.22+i*.29)+.17*math.sin(u*4.4+i*.85)-.16*u
@@ -104,9 +104,9 @@ def landscape(x,y,w,h):
 
 def main(root):
     png(root/"Background.png", wallpaper)
-    png(root/"GlassNX"/"Lockscreen.png",landscape,(1920,1080))
-    png(root/"GlassNX"/"Unlock.png",glass,(640,140))
-    png(root/"GlassNX"/"Alert.png",glass,(1200,108))
+    png(root/"GlassNX"/"Lockscreen.png",wallpaper,(1920,1080))
+    png(root/"GlassNX"/"Unlock.png",glass,(720,120))
+    png(root/"GlassNX"/"Alert.png",glass,(960,150))
     for name in ("Default","Application","Folder","Homebrew"):
         png(root/"Main"/"TopMenuBackground"/(name+".png"),glass)
     for name in ("Main/InputBarBackground.png","Settings/InputBarBackground.png"):

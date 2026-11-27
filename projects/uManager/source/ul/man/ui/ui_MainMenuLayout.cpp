@@ -48,7 +48,7 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::ResetInfoText() {
-        std::string info = "GlassNX Manager v0.10";
+        std::string info = "GlassNX Manager v0.11";
         if(g_MainApplication->IsAvailable()) {
             const auto ver = g_MainApplication->GetVersion();
             info += " | HOME service version " + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);

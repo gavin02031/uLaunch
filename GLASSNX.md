@@ -58,3 +58,6 @@ First install the complete v0.10 package manually. For later releases transfer t
 
 ## v0.11 development — guarded GPU integration
 Imported the GPU renderer and host tests from Codex PR #1 (16f6855). Enhanced GPU glass is opt-in under Settings > About, and Safe Mode or suspended games override it. GPU resources are released on transition. Failed target setup avoids clearing the active framebuffer. This is wallpaper-only refraction, not live content blur. The v0.10 updater and lifecycle changes remain intact. Device testing pending.
+
+## v0.11 — Codex PR #1 integration
+Integrated the graphics contribution from 16f6855 into the stability/updater branch, with deliberate safety changes. Five-column game library with sidebar, refined highlights, typography, centered page indicators, smoothstep transition, and larger lock clock with static glass assets. Vertical control sliders retained from original design. Native 720p framebuffer scaling and GPU lock lens from PR are deferred until hardware stability is established. Mesa smoke test added to CI; tests are not device performance evidence. Hardware crash diagnosis still requires logs. For updating from v0.10 use the inner release ZIP as /glassnx/update.zip and the manager; keep an external SD backup. No live game framebuffer sampling.
