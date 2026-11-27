@@ -330,7 +330,7 @@ namespace ul::menu::ui {
         }
         if(glassnx_quiet && text.rfind("Low battery:",0)!=0)return;
         this->EndOverlay();
-        this->notif_toast->SetText(text);
+        this->notif_toast->SetText("GlassNX  ·  "+text);
         this->notif_toast->SetX(1920-this->notif_toast->GetWidth()-46);
         this->notif_toast->SetY(118);
         this->StartOverlayWithTimeout(this->notif_toast, timeout);
@@ -442,7 +442,9 @@ namespace ul::menu::ui {
     int MenuApplication::DisplayDialog(const std::string &title, const std::string &content, const std::vector<std::string> &opts, const bool use_last_opt_as_cancel, pu::sdl2::TextureHandle::Ref icon) {
         return this->CreateShowDialog(title, content, opts, use_last_opt_as_cancel, icon, [&](pu::ui::Dialog::Ref &dialog) {
             dialog->SetTitleColor(this->dialog_title_clr);
-            dialog->SetContentColor(this->dialog_title_clr);
+            dialog->SetContentColor(this->dialog_cnt_clr);
+            dialog->SetDialogBorderRadius(60);
+            dialog->SetOptionBorderRadius(40);
             dialog->SetOptionColor(this->dialog_opt_clr);
             dialog->SetDialogColor(this->dialog_clr);
             dialog->SetOverColor(this->dialog_over_clr);

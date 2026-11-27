@@ -31,7 +31,7 @@ namespace ul::menu::ui {
         brand->SetColor({255,255,255,255});
         brand->SetFont(pu::ui::MakeDefaultFontName(37));
         this->Add(brand);
-        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "Press A to unlock");
+        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "A   Unlock");
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("lockscreen_menu", "info_text", this->info_text);
         this->Add(this->info_text);
@@ -51,7 +51,7 @@ namespace ul::menu::ui {
             this->older_panel=pu::ui::elm::Image::New(480,665,tex);
             this->older_panel->SetVisible(false);this->Add(this->older_panel);
         }
-        this->notification_heading = pu::ui::elm::TextBlock::New(0, 513, "Notifications");
+        this->notification_heading = pu::ui::elm::TextBlock::New(0, 513, "GlassNX  ·  Notifications");
         this->notification_heading->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
         this->notification_heading->SetColor({255,255,255,255});
         this->notification_heading->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
@@ -92,18 +92,23 @@ namespace ul::menu::ui {
     void LockscreenMenuLayout::OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) {
         const auto &history = g_MenuApplication->GetNotificationHistory();
         const auto message = history.empty() ? std::string("You're all caught up.") : history.back();
+        const auto heading=history.empty()?std::string("GlassNX  ·  Notifications"):"GlassNX  ·  "+std::to_string(history.size())+" saved alerts";
+        if(this->notification_heading->GetText()!=heading)this->notification_heading->SetText(heading);
         if(this->notification_text->GetText() != message) this->notification_text->SetText(message);
         const bool has_older=history.size()>1;
         if(this->older_panel)this->older_panel->SetVisible(has_older);
         this->older_notification->SetVisible(has_older);
         if(has_older && this->older_notification->GetText()!=history[history.size()-2])this->older_notification->SetText(history[history.size()-2]);
-        if((keys_down & HidNpadButton_A) || touch_pos.HitsRegion(600, 875, 720, 120)) {
+        const bool unlock_touch=!touch_latched && touch_pos.HitsRegion(600, 875, 720, 120);
+        touch_latched=!touch_pos.IsEmpty();
+        if((keys_down & HidNpadButton_A) || unlock_touch) {
             UnlockScreen();
             return;
         }
 
         this->UpdateConnectionTopIcon(this->connection_top_icon);
         this->UpdateTimeText(this->time_mtext);
+        this->time_mtext->Get(1)->SetVisible(true);
         this->UpdateDateText(this->date_text);
         this->UpdateBatteryTextAndTopIcons(this->battery_text, this->battery_top_icon, this->battery_charging_top_icon);
     }

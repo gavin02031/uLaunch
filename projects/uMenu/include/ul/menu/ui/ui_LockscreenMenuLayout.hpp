@@ -6,6 +6,7 @@ namespace ul::menu::ui {
 
     class LockscreenMenuLayout : public IMenuLayout {
         private:
+            bool touch_latched=true;
             pu::ui::elm::TextBlock::Ref info_text;
             pu::ui::elm::TextBlock::Ref notification_text;
             pu::ui::elm::TextBlock::Ref notification_heading;

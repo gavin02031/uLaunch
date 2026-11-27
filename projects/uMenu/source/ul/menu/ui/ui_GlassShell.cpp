@@ -686,7 +686,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.12",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.13",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -827,7 +827,7 @@ namespace ul::menu::ui {
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.12 · SAFE":"v0.12",130,76,27);
+        Label(r,safe_mode?"v0.13 · SAFE":"v0.13",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -975,13 +975,23 @@ namespace ul::menu::ui {
                 Label(r,"Fan: unavailable",1340,909,27);
             } else {
                 const auto &history=g_MenuApplication->GetNotificationHistory();
-                if(history.empty()) {Card(r,430,270,1060,170);Label(r,"You're all caught up.",960,325,45,0,true);}
+                if(history.empty()) {
+                    Card(r,430,270,1060,310);
+                    Glyph(r,"bell",926,315,68);
+                    Label(r,"You're all caught up.",960,415,45,0,true);
+                    Label(r,"System alerts will appear here.",960,485,30,0,true);
+                }
                 const int total=static_cast<int>(history.size());
                 alert_offset=std::clamp(alert_offset,0,std::max(0,total-4));
                 for(int i=0;i<4&&alert_offset+i<total;++i) {
                     int y=245+i*155;Card(r,430,y,1060,130);
-                    Glyph(r,"bell",460,y+30,48);
-                    Label(r,"GlassNX",525,y+12,27);Label(r,history[total-1-alert_offset-i],525,y+53,37,920);
+                    const auto message=history[total-1-alert_offset-i];
+                    const bool battery_alert=message.rfind("Low battery:",0)==0;
+                    r->RenderRoundedRectangleFill(battery_alert?pu::ui::Color{196,108,129,165}:pu::ui::Color{124,153,219,125},454,y+25,64,64,20);
+                    Glyph(r,battery_alert?"battery":"bell",465,y+35,42);
+                    Label(r,battery_alert?"Battery":"GlassNX",545,y+12,27);
+                    Label(r,message,545,y+53,37,900);
+                    hits.push_back({430,y,1060,130,[message](){g_MenuApplication->DisplayDialog("GlassNX notification",message,{"Done"},true);}});
                 }
                 if(total>0)Label(r,std::to_string(alert_offset+1)+"–"+std::to_string(std::min(alert_offset+4,total))+" of "+std::to_string(total)+" alerts",960,860,27,0,true);
                 if(total>4) {

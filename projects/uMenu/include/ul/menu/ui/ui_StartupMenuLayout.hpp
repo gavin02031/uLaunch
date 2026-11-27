@@ -13,7 +13,9 @@ namespace ul::menu::ui {
         private:
             bool load_menu;
             pu::ui::elm::TextBlock::Ref info_text;
-            pu::ui::elm::Menu::Ref users_menu;
+            class ProfileCards;
+            std::shared_ptr<ProfileCards> profile_cards;
+            bool touch_latched=false;
             pu::audio::Sfx user_create_sfx;
             pu::audio::Sfx user_select_sfx;
 

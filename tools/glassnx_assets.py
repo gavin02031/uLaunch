@@ -60,7 +60,7 @@ def signed_distance(x, y, w, h, radius, inset):
     return math.hypot(max(qx,0),max(qy,0)) + min(max(qx,qy),0) - radius
 
 def glass(x, y, w, h, outline=False, subtle=False):
-    radius = min(38, w*.16, h*.38)
+    radius = min(54, w*.16, h*.46)
     d = signed_distance(x,y,w,h,radius,3)
     v=y/h
     if outline:
@@ -104,8 +104,8 @@ def landscape(x,y,w,h):
 
 def main(root):
     png(root/"Background.png", wallpaper)
-    png(root/"GlassNX"/"Lockscreen.png",wallpaper,(1920,1080))
-    png(root/"GlassNX"/"Unlock.png",glass,(720,120))
+    png(root/"GlassNX"/"Lockscreen.png",landscape,(1920,1080))
+    png(root/"GlassNX"/"Unlock.png",lambda x,y,w,h:glass(x,y,w,h),(720,120))
     png(root/"GlassNX"/"Alert.png",glass,(960,150))
     for name in ("Default","Application","Folder","Homebrew"):
         png(root/"Main"/"TopMenuBackground"/(name+".png"),glass)
