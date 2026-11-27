@@ -10,8 +10,11 @@ extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 namespace ul::menu::ui {
 
     ThemesMenuLayout::ThemesMenuLayout() : IMenuLayout() {
-        auto brand=pu::ui::elm::TextBlock::New(70,45,"GlassNX  /  Appearance");
-        brand->SetFont(pu::ui::MakeDefaultFontName(30));brand->SetColor({238,244,255,225});this->Add(brand);
+        auto brand=pu::ui::elm::TextBlock::New(70,38,"Theme studio");
+        brand->SetFont(pu::ui::MakeDefaultFontName(45));brand->SetColor({238,244,255,225});this->Add(brand);
+        this->Add(GlassSystemPanel::New(1600,24,250,82));
+        auto back=pu::ui::elm::TextBlock::New(1650,46,"B  Back");
+        back->SetFont(pu::ui::MakeDefaultFontName(30));back->SetColor({238,244,255,255});this->Add(back);
         this->Add(GlassSystemPanel::New(70,120,1780,930));
         this->info_text = pu::ui::elm::TextBlock::New(0, 0, GetLanguageString("theme_info_text"));
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
@@ -34,7 +37,10 @@ namespace ul::menu::ui {
     }
 
     void ThemesMenuLayout::OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) {
-        if(keys_down & HidNpadButton_B) {
+        bool back_requested=(keys_down&HidNpadButton_B)!=0;
+        if(touch_pos.IsEmpty())header_touch_latched=false;
+        else if(!header_touch_latched){header_touch_latched=true;if(touch_pos.HitsRegion(1600,24,250,82))back_requested=true;}
+        if(back_requested) {
             pu::audio::PlaySfx(this->back_sfx);
 
             g_MenuApplication->LoadMenu(MenuType::Main);
@@ -49,8 +55,10 @@ namespace ul::menu::ui {
     }
 
     void ThemesMenuLayout::Reload() {
+        this->header_touch_latched=true;
         this->themes_menu->ClearItems();
         this->loaded_themes.clear();
+        this->loaded_theme_icons.clear();
         
         this->loaded_themes = cfg::FindThemes();
         this->loaded_themes.insert(this->loaded_themes.begin(), cfg::Theme{}); // For the "default theme" entry
@@ -76,7 +84,7 @@ namespace ul::menu::ui {
                 auto theme_icon = pu::sdl2::TextureHandle::New(pu::ui::render::LoadImageFromFile(theme_icon_path));
                 this->loaded_theme_icons.push_back(theme_icon);
 
-                auto theme_item = pu::ui::elm::MenuItem::New(theme.manifest.name + " (v" + theme.manifest.release + ", " + theme.manifest.author + ")");
+                auto theme_item = pu::ui::elm::MenuItem::New(std::string(theme.IsSame(g_GlobalSettings.active_theme)?"•  ":"")+theme.manifest.name + "  /  " + theme.manifest.author + "  ·  v" + theme.manifest.release);
                 theme_item->AddOnKey(std::bind(&ThemesMenuLayout::theme_DefaultKey, this));
                 theme_item->SetColor(g_MenuApplication->GetTextColor());
                 theme_item->SetIcon(theme_icon);
@@ -84,7 +92,7 @@ namespace ul::menu::ui {
             }
             else {
                 this->loaded_theme_icons.emplace_back();
-                auto theme_reset_item = pu::ui::elm::MenuItem::New(GetLanguageString("theme_reset"));
+                auto theme_reset_item = pu::ui::elm::MenuItem::New(g_GlobalSettings.active_theme.IsValid()?"Restore default theme":"•  Default theme");
                 theme_reset_item->AddOnKey(std::bind(&ThemesMenuLayout::theme_DefaultKey, this));
                 theme_reset_item->SetColor(g_MenuApplication->GetTextColor());
                 theme_reset_item->SetIcon(GetLogoTexture());
