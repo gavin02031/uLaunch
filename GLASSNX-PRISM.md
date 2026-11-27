@@ -38,3 +38,6 @@ Design for 1280x720 handheld output first, using the existing logical 1920x1080 
 - Standard and safe rendering pass first; experimental rendering is separate and clearly labeled.
 - External SD backup, full package installation and rollback tested on spare media; no claim of atomic FAT update or guaranteed ban safety.
 - No unresolved critical lifecycle, loss-of-data, install/recovery or accessibility regressions.
+
+## Design continuity — v0.23
+Keep the existing Home composition, optical dock, four wallpaper identities and user-approved artwork presentation. Use iiSU (https://iisu.network/) as a reference for artwork-first handheld navigation and SUMEE! (https://sumee.online/) for coherent built-in applications and personalization. These are inspiration, not dependencies or asset sources. Rework each remaining legacy user-facing surface incrementally: system settings, theme manager, profile/lock, dialogs, folder/entry organization, manager/recovery and original sounds. Preserve upstream credits, config identifiers and safe recovery, plus stable internal interfaces unless there is a tested migration. Native Nintendo applet boundaries remain explicit. New features must use real data and supported APIs.
