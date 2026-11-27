@@ -1,3 +1,4 @@
+#include <ul/glassnx/Brand.hpp>
 #include <ul/loader/loader_SelfProcess.hpp>
 #include <ul/loader/loader_Target.hpp>
 #include <ul/loader/loader_Input.hpp>
@@ -57,6 +58,7 @@ int main() {
     UL_RC_ASSERT(fsdevMountSdmc());
 
     ul::InitializeLogging("uLoader");
+    UL_LOG_INFO("%s v%s",ul::glassnx::Loader,ul::glassnx::Version);
 
     UL_RC_ASSERT(setsysInitialize());
     

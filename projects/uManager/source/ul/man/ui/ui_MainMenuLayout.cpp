@@ -1,4 +1,5 @@
 #include <ul/man/ui/ui_MainApplication.hpp>
+#include <ul/glassnx/Brand.hpp>
 #include <ul/menu/menu_Cache.hpp>
 #include <ul/menu/menu_Entries.hpp>
 #include <ul/acc/acc_Accounts.hpp>
@@ -17,6 +18,38 @@ extern ul::util::JSON g_MainLanguage;
 namespace ul::man::ui {
 
     namespace {
+
+        class ManagerBackdrop : public pu::ui::elm::Element {
+        public:
+            ManagerBackdrop()=default;
+            PU_SMART_CTOR(ManagerBackdrop)
+            s32 GetX() override{return 0;}
+            s32 GetY() override{return 0;}
+            s32 GetWidth() override{return 1920;}
+            s32 GetHeight() override{return 1080;}
+            void OnRender(pu::ui::render::Renderer::Ref &r,const s32,const s32) override {
+                // Bounded drawing only; recovery must remain independent of GPU target effects.
+                for(int i=0;i<24;i++) {
+                    const int y=i*45;
+                    r->RenderRectangleFill({static_cast<u8>(31+i),static_cast<u8>(36+i),static_cast<u8>(79+i*2),255},0,y,1920,45);
+                }
+                r->RenderRoundedRectangleFill({165,132,216,36},-95,290,810,810,280);
+                r->RenderRoundedRectangleFill({99,176,231,32},1250,-230,910,770,250);
+                auto glass=[&](int x,int y,int w,int h) {
+                    r->RenderRoundedRectangleFill({12,17,47,100},x,y+8,w,h,40);
+                    r->RenderRoundedRectangleFill({143,161,223,64},x,y,w,h,40);
+                    r->RenderRoundedRectangle({220,230,255,90},x,y,w,h,40);
+                    r->RenderRoundedRectangle({241,239,255,28},x+3,y+3,w-6,h-6,37);
+                };
+                glass(70,230,550,680);glass(665,230,1185,680);
+                r->RenderRoundedRectangleFill({122,145,218,80},118,282,155,155,42);
+                r->RenderRoundedRectangleFill({220,232,255,145},145,310,82,80,25);
+                r->RenderRoundedRectangleFill({110,150,220,220},177,342,75,76,23);
+                r->RenderRoundedRectangle({255,255,255,170},177,342,75,76,23);
+                r->RenderRoundedRectangleFill({135,157,224,60},650,945,620,76,38);
+            }
+            void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override{}
+        };
 
         inline std::string GetLanguageString(const std::string &name) {
             return cfg::GetLanguageString(g_MainLanguage, g_DefaultLanguage, name);
@@ -48,7 +81,7 @@ namespace ul::man::ui {
     }
 
     void MainMenuLayout::ResetInfoText() {
-        std::string info = "GlassNX Manager v0.11";
+        std::string info = std::string(ul::glassnx::Manager)+" v"+ul::glassnx::Version;
         if(g_MainApplication->IsAvailable()) {
             const auto ver = g_MainApplication->GetVersion();
             info += " | HOME service version " + std::to_string((u32)ver.major) + "." + std::to_string((u32)ver.minor) + "." + std::to_string((u32)ver.micro);
@@ -60,6 +93,21 @@ namespace ul::man::ui {
     }
 
     MainMenuLayout::MainMenuLayout() : pu::ui::Layout() {
+        this->Add(ManagerBackdrop::New());
+        auto label=[&](int x,int y,const char *value,int size) {
+            auto t=pu::ui::elm::TextBlock::New(x,y,value);
+            t->SetColor({238,244,255,255});t->SetFont(pu::ui::MakeDefaultFontName(size));
+            this->Add(t);
+        };
+        label(75,48,"GlassNX",64);
+        label(78,136,"System management",35);
+        label(118,480,"Recovery",45);
+        label(118,557,"Manage HOME",35);
+        label(118,613,"Restore or repair",35);
+        label(118,669,"Keep your saves",35);
+        label(118,780,"Native Switch runtime",35);
+        label(705,268,"System actions",45);
+        label(735,965,"A  Select       +  Exit",35);
         this->info_text = pu::ui::elm::TextBlock::New(0, InfoTextY, "...");
         this->ResetInfoText();
         this->info_text->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::MediumLarge));
@@ -72,19 +120,19 @@ namespace ul::man::ui {
         this->update_download_bar->SetVisible(false);
         this->Add(this->update_download_bar);
 
-        this->options_menu = pu::ui::elm::Menu::New(0, MenuY, pu::ui::render::ScreenWidth, MenuColor, MenuFocusColor, MenuItemSize, MenuItemCount);
+        this->options_menu = pu::ui::elm::Menu::New(695, MenuY, 1125, MenuColor, MenuFocusColor, MenuItemSize, MenuItemCount);
         
         this->activate_menu_item = pu::ui::elm::MenuItem::New(GetStatus());
         this->activate_menu_item->SetColor(MenuItemColor);
         this->activate_menu_item->AddOnKey(std::bind(&MainMenuLayout::activate_DefaultKey, this));
         this->options_menu->AddItem(this->activate_menu_item);
 
-        this->reset_menu_menu_item = pu::ui::elm::MenuItem::New(GetLanguageString("reset_menu_item"));
+        this->reset_menu_menu_item = pu::ui::elm::MenuItem::New("Reset library layout");
         this->reset_menu_menu_item->SetColor(MenuItemColor);
         this->reset_menu_menu_item->AddOnKey(std::bind(&MainMenuLayout::resetMenu_DefaultKey, this));
         this->options_menu->AddItem(this->reset_menu_menu_item);
 
-        this->reset_cache_menu_item = pu::ui::elm::MenuItem::New(GetLanguageString("reset_cache_item"));
+        this->reset_cache_menu_item = pu::ui::elm::MenuItem::New("Rebuild artwork cache");
         this->reset_cache_menu_item->SetColor(MenuItemColor);
         this->reset_cache_menu_item->AddOnKey(std::bind(&MainMenuLayout::resetCache_DefaultKey, this));
         this->options_menu->AddItem(this->reset_cache_menu_item);

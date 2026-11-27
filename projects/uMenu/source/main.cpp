@@ -1,3 +1,4 @@
+#include <ul/glassnx/Brand.hpp>
 #include <ul/fs/fs_Stdio.hpp>
 #include <ul/cfg/cfg_Config.hpp>
 #include <ul/util/util_Json.hpp>
@@ -60,6 +61,7 @@ extern "C" {
         __libnx_init_time();
 
         ul::InitializeLogging("uMenu");
+    UL_LOG_INFO("%s v%s",ul::glassnx::Home,ul::glassnx::Version);
         UL_LOG_INFO("Alive!");
 
         UL_RC_ASSERT(setsysInitialize());

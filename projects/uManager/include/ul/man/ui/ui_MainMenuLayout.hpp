@@ -6,9 +6,9 @@ namespace ul::man::ui {
 
     class MainMenuLayout : public pu::ui::Layout {
         public:
-            static constexpr pu::ui::Color BackgroundColor = { 61, 164, 255, 255 };
+            static constexpr pu::ui::Color BackgroundColor = { 31, 36, 79, 255 };
             
-            static constexpr u32 InfoTextY = 50;
+            static constexpr u32 InfoTextY = 174;
             static constexpr pu::ui::Color InfoTextColor = { 255, 255, 255, 255 };
 
             static constexpr u32 UpdateDownloadBarY = 170;
@@ -16,11 +16,11 @@ namespace ul::man::ui {
             static constexpr u32 UpdateDownloadBarWidth = pu::ui::render::ScreenWidth - 2 * UpdateDownloadBarHorizontalMargin;
             static constexpr u32 UpdateDownloadBarHeight = 80;
             
-            static constexpr u32 MenuY = 160;
-            static constexpr pu::ui::Color MenuColor = { 4, 109, 208, 255 };
-            static constexpr pu::ui::Color MenuFocusColor = { 0, 148, 255, 255 };
-            static constexpr u32 MenuItemCount = 6;
-            static constexpr u32 MenuItemSize = 120;
+            static constexpr u32 MenuY = 350;
+            static constexpr pu::ui::Color MenuColor = { 38, 47, 91, 100 };
+            static constexpr pu::ui::Color MenuFocusColor = { 111, 139, 205, 170 };
+            static constexpr u32 MenuItemCount = 4;
+            static constexpr u32 MenuItemSize = 128;
             static constexpr pu::ui::Color MenuItemColor = { 225, 225, 225, 255 };
 
         private:

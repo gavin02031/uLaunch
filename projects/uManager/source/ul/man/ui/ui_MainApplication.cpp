@@ -18,7 +18,7 @@ namespace ul::man::ui {
         auto toast_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         toast_text->SetFont(pu::ui::GetDefaultFont(pu::ui::DefaultFontSize::Medium));
         toast_text->SetColor(pu::ui::Color(225, 225, 225, 255));
-        this->toast = pu::ui::extras::Toast::New(toast_text, pu::ui::Color(40, 40, 40, 255));
+        this->toast = pu::ui::extras::Toast::New(toast_text, pu::ui::Color(55, 68, 115, 245));
 
         this->SetOnInput(std::bind(&MainApplication::OnInput, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
         this->LoadLayout(this->main_menu_lyt);

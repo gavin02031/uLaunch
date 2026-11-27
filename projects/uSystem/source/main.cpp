@@ -1,3 +1,4 @@
+#include <ul/glassnx/Brand.hpp>
 #include <ul/system/ecs/ecs_ExternalContent.hpp>
 #include <ul/system/la/la_Open.hpp>
 #include <ul/system/sf/sf_IpcManager.hpp>
@@ -455,7 +456,7 @@ namespace {
         g_LastLibraryAppletLaunchedNotMenu = false;
         UpdateStatus();
 
-        UL_LOG_INFO("Launching uMenu with start mode %d...", static_cast<u32>(st_mode));
+        UL_LOG_INFO("Launching GlassNX Home with start mode %d...", static_cast<u32>(st_mode));
         return ecs::RegisterLaunchAsApplet(la::GetMenuProgramId(), static_cast<u32>(st_mode), "/glassnx/bin/uMenu", std::addressof(g_CurrentStatus), sizeof(g_CurrentStatus));
     }
 
@@ -1105,7 +1106,7 @@ namespace {
             }
             case ActionType::RestartMenu: {
                 if(!la::IsActive()) {
-                    UL_LOG_INFO("Restarting uMenu...");
+                    UL_LOG_INFO("Restarting GlassNX Home...");
                     UL_RC_ASSERT(LaunchMenu(ul::smi::MenuStartMode::StartupMenuPostBoot));
     
                     return true;
@@ -1165,7 +1166,7 @@ namespace {
                 break;
             }
             case ActionType::TerminateMenu: {
-                UL_LOG_INFO("Terminating uMenu...");
+                UL_LOG_INFO("Terminating GlassNX Home...");
                 UL_RC_ASSERT(la::Terminate());
 
                 return true;
@@ -1561,6 +1562,7 @@ namespace ams {
             // FS and log init is intentionally done at the end, otherwise the SD doesn't seem to be always ready...?
             UL_RC_ASSERT(fsdevMountSdmc());
             ul::InitializeLogging("uSystem");
+    UL_LOG_INFO("%s v%s",ul::glassnx::System,ul::glassnx::Version);
         }
 
         void FinalizeSystemModule() {
@@ -1602,7 +1604,7 @@ namespace ams {
         // Initialize everything
         Initialize();
 
-        UL_LOG_INFO("Hello World from uSystem! Launching uMenu...");
+        UL_LOG_INFO("GlassNX Core ready; launching Home...");
 
         // After having initialized everything, launch our menu
         UL_RC_ASSERT(LaunchMenu(ul::smi::MenuStartMode::StartupMenuPostBoot));

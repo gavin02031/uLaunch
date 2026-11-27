@@ -64,3 +64,6 @@ Integrated the graphics contribution from 16f6855 into the stability/updater bra
 
 ## v0.12 — close-game regression repair
 Hide the legacy screen-capture layer whenever GlassNX HOME is visible. Close releases its texture, resets alpha/state, invalidates the hero and clears suspended state after successful IPC. Failed captures are not uploaded. The backend checks for actual completion and no longer returns the original timeout after successful forced termination. Legacy fallback remains available. Device validation required.
+
+### Unified component identity
+Core (uSystem) and Launch Runtime (uLoader) are headless and log the shared GlassNX brand/version. Keep executable paths, protocol version, NPDM permissions, and legacy log filenames stable for safe manual upgrades and recovery. Manager has a new glass-styled recovery dashboard, with its original guarded action handlers and no GPU target effects. Home adds a title export in Settings > Homebrew and an integrations info entry. Export is limited to the current folder. Discord is not connected yet; do not install another background sysmodule until the crash regression is tested.

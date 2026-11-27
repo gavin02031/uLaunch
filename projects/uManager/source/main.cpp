@@ -1,3 +1,4 @@
+#include <ul/glassnx/Brand.hpp>
 #include <ul/man/ui/ui_MainApplication.hpp>
 #include <ul/sf/sf_PublicService.hpp>
 
@@ -27,6 +28,7 @@ namespace {
 
 int main() {
     ul::InitializeLogging("uManager");
+    UL_LOG_INFO("%s v%s",ul::glassnx::Manager,ul::glassnx::Version);
     Initialize();
 
     auto renderer_opts = pu::ui::render::RendererInitOptions(SDL_INIT_EVERYTHING, pu::ui::render::RendererHardwareFlags);
@@ -36,6 +38,8 @@ int main() {
     renderer_opts.SetPlServiceType(PlServiceType_User);
     renderer_opts.AddDefaultAllSharedFonts();
     renderer_opts.AddExtraDefaultFontSize(35);
+    renderer_opts.AddExtraDefaultFontSize(45);
+    renderer_opts.AddExtraDefaultFontSize(64);
 
     renderer_opts.UseRomfs();
 

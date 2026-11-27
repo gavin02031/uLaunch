@@ -286,7 +286,7 @@ namespace ul::menu::ui {
             const auto name=Fold(EntryName(e));
             bool utility=e.Is<EntryType::Application>() &&
                 (name=="sphaira" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
-                 name=="youtube tv" || name=="youtube" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
+                 name=="youtube tv" || name=="youtube" || name=="streamfin" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
             if(e.Is<EntryType::Application>()) {
                 const auto it=title_categories.find(e.app_info.app_id);
                 if(it!=title_categories.end())utility=it->second==2;
@@ -668,9 +668,25 @@ namespace ul::menu::ui {
                     case 6:
                         row("App Library","Browse installed homebrew",[this](){SetPage(Page::Apps);});
                         row("Manage entries","Folders and shortcuts",legacy);
-                        row("Installed themes","Theme manager",[](){ShowThemesMenu();});break;
+                        row("Installed themes","Theme manager",[](){ShowThemesMenu();});
+                        row("Artwork & Discord","Optional integrations",[](){
+                            g_MenuApplication->DisplayDialog("GlassNX integrations","SteamGridDB: import JPG hero art to /glassnx/art using the PC tool.\nDiscord: optional external presence companion; not connected in this version.",{"OK"},true);
+                        });
+                        row("Export title list","For artwork imports",[this](){
+                            auto fp=fopen("sdmc:/glassnx/titles.tsv.tmp","wb");
+                            if(!fp){g_MenuApplication->ShowNotification("Could not export title list");return;}
+                            bool ok=true;
+                            for(auto &e:entries->GetEntries())if(e.Is<EntryType::Application>()){
+                                auto name=EntryName(e);for(auto &ch:name)if(ch=='\t'||ch=='\n'||ch=='\r')ch=' ';
+                                if(fprintf(fp,"%016llx\t%s\n",static_cast<unsigned long long>(e.app_info.app_id),name.c_str())<0)ok=false;
+                            }
+                            if(fclose(fp)!=0)ok=false;
+                            if(ok&&rename("sdmc:/glassnx/titles.tsv.tmp","sdmc:/glassnx/titles.tsv")==0)
+                                g_MenuApplication->ShowNotification("Exported current folder to /glassnx/titles.tsv");
+                            else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
+                        });break;
                     case 7:
-                        row("GlassNX","Version 0.11",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.12",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -811,7 +827,7 @@ namespace ul::menu::ui {
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.11 · SAFE":"v0.11",130,76,27);
+        Label(r,safe_mode?"v0.12 · SAFE":"v0.12",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
