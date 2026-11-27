@@ -8,6 +8,8 @@
 namespace ul::glassnx {
     // Featured artwork occupies 1130 x 405 logical pixels: exactly 226:81.
     constexpr int HeroWidth=1130, HeroHeight=405;
+    inline bool IsSquareCover(int w,int h) {return w==h&&(w==512||w==1024);}
+    inline bool IsHeroSource(int w,int h) {return w>=HeroWidth&&h>=HeroHeight&&w<=1920&&h<=1920&&w>h;}
     inline SDL_Surface *NormalizeArtwork(SDL_Surface *source,bool hero,int size,std::string &error) {
         const int w=hero?HeroWidth:size,h=hero?HeroHeight:size;
         if(!source || source->w<=0 || source->h<=0){error="This artwork could not be decoded. Choose another image.";return nullptr;}
@@ -15,7 +17,7 @@ namespace ul::glassnx {
         if(int64_t(crop.w)*h>int64_t(crop.h)*w)crop.w=int(int64_t(crop.h)*w/h);
         else crop.h=int(int64_t(crop.w)*h/w);
         crop.x=(source->w-crop.w)/2;crop.y=(source->h-crop.h)/2;
-        if(crop.w<w || crop.h<h){error=hero?"Choose a sharper Hero: the center crop must be at least 1130 x 405.":"Choose a sharper Cover: the square crop must be at least 1024 x 1024.";return nullptr;}
+        if(crop.w<w || crop.h<h){error=hero?"Choose a sharper Hero: the center crop must be at least 1130 x 405.":"Choose artwork at least "+std::to_string(size)+" x "+std::to_string(size)+".";return nullptr;}
         auto output=SDL_CreateRGBSurfaceWithFormat(0,w,h,32,SDL_PIXELFORMAT_RGBA32);
         if(!output){error="Not enough memory to prepare artwork.";return nullptr;}
         SDL_SetSurfaceBlendMode(source,SDL_BLENDMODE_NONE);

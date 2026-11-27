@@ -60,10 +60,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install host SDL and Mesa
-      run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl1-mesa-dri g++
+      run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libgl1-mesa-dri g++
     - name: Validate production glass material with Mesa
       run: |
         g++ -std=c++17 -Wall -Wextra -Werror -Iprojects/uMenu/include \
           tests/liquid_glass.cpp projects/uMenu/source/ul/menu/ui/ui_LiquidGlass.cpp \
           $(sdl2-config --cflags --libs) -o /tmp/liquid-glass-smoke
         SDL_VIDEODRIVER=offscreen /tmp/liquid-glass-smoke
+
+    - name: Validate artwork dimensions and cropping
+      run: |
+        g++ -std=c++17 -Wall -Wextra -Werror -Ilibs/uCommon/include tests/artwork.cpp $(pkg-config --cflags --libs sdl2 SDL2_image) -o /tmp/glassnx-artwork-test
+        /tmp/glassnx-artwork-test

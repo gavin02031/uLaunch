@@ -206,22 +206,26 @@ namespace ul::menu::ui {
             // Decode only the bounded response, and render a small preview.
             auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
             auto image=rw?IMG_Load_RW(rw,1):nullptr;
-            auto normalized=ul::glassnx::NormalizeArtwork(image,hero,1024,error);
+            const bool valid=image&&(hero?ul::glassnx::IsHeroSource(image->w,image->h):ul::glassnx::IsSquareCover(image->w,image->h));
+            const int source_w=image?image->w:0,source_h=image?image->h:0;
+            const int cover_size=source_w==1024?1024:512;
+            auto normalized=valid?ul::glassnx::NormalizeArtwork(image,hero,cover_size,error):nullptr;
+            if(!valid)error=hero?"Choose a compatible landscape hero.":"Choose an original 512 x 512 or 1024 x 1024 square image.";
             if(image)SDL_FreeSurface(image);
             if(!normalized){
                 if(g_MenuApplication->DisplayDialog("Choose sharper artwork",error,{"Next artwork","Cancel"},true)!=0)return;
                 ++i;continue;
             }
             image=normalized;
-            const float scale=std::min(360.f/image->w,220.f/image->h);
+            const float scale=std::min(520.f/image->w,320.f/image->h);
             auto small=SDL_CreateRGBSurfaceWithFormat(0,std::max(1,int(image->w*scale)),std::max(1,int(image->h*scale)),32,SDL_PIXELFORMAT_RGBA32);
             SDL_Texture *tex=nullptr;
             if(small&&SDL_BlitScaled(image,nullptr,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
             if(small)SDL_FreeSurface(small);
             if(!tex){SDL_FreeSurface(image);++i;continue;}
             auto preview=pu::sdl2::TextureHandle::New(tex);
-            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size())+" • "+(hero?"Hero":"Cover")+"\nSource: "+std::to_string(pictures[i].width)+" x "+std::to_string(pictures[i].height)+"\n"+(hero?"Center crop • 226:81 • 1130 x 405":"Square crop • 512 x 512 + 1024 x 1024"),{"Apply artwork","Next artwork","Cancel"},true,preview);
-            if(pick==1){SDL_FreeSurface(image);++i;continue;}
+            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size())+" • "+(hero?"Hero":"Cover")+"\nSource: "+std::to_string(source_w)+" x "+std::to_string(source_h)+"\n"+(hero?"Center crop • 226:81 • 1130 x 405":cover_size==1024?"Square • 512 + 1024":"Square • 512 x 512"),{"Apply","Next","Previous","Cancel"},true,preview);
+            if(pick==1||pick==2){SDL_FreeSurface(image);i=pick==1?(i+1)%pictures.size():(i+pictures.size()-1)%pictures.size();continue;}
             if(pick!=0){SDL_FreeSurface(image);return;}
             bool saved=false;
             if(!Conservative()) {
@@ -229,7 +233,14 @@ namespace ul::menu::ui {
                 else {
                     auto tile=ul::glassnx::NormalizeArtwork(image,false,512,error);
                     if(tile){
-                        saved=ul::glassnx::ExportArtwork(image,root+".cover1024",error) && ul::glassnx::ExportArtwork(tile,root+".cover",error);
+                        // Publish the active tile first. The high-resolution copy is optional.
+                        saved=ul::glassnx::ExportArtwork(tile,root+".cover",error);
+                        if(saved){
+                            if(cover_size==1024){
+                                std::string optional_error;
+                                if(!ul::glassnx::ExportArtwork(image,root+".cover1024",optional_error))remove((root+".cover1024").c_str());
+                            }else remove((root+".cover1024").c_str());
+                        }
                         SDL_FreeSurface(tile);
                     }
                 }
@@ -237,7 +248,7 @@ namespace ul::menu::ui {
             SDL_FreeSurface(image);
             if(saved){
                 custom_icons.erase(id);banner.reset();banner_checked=false;
-                g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Cover applied • 512 + 1024 square");
+                g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Square cover applied");
             } else g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);
             return;
         }
