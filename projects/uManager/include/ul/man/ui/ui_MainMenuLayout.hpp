@@ -31,6 +31,7 @@ namespace ul::man::ui {
             pu::ui::elm::MenuItem::Ref reset_menu_menu_item;
             pu::ui::elm::MenuItem::Ref reset_cache_menu_item;
             pu::ui::elm::MenuItem::Ref update_menu_item;
+            pu::ui::elm::MenuItem::Ref artwork_menu_item;
 
             void ResetInfoText();
 
@@ -40,6 +41,7 @@ namespace ul::man::ui {
                 this->options_menu->AddItem(this->reset_menu_menu_item);
                 this->options_menu->AddItem(this->reset_cache_menu_item);
                 this->options_menu->AddItem(this->update_menu_item);
+                this->options_menu->AddItem(this->artwork_menu_item);
             }
 
         public:
@@ -50,6 +52,7 @@ namespace ul::man::ui {
             void resetMenu_DefaultKey();
             void resetCache_DefaultKey();
             void update_DefaultKey();
+            void artwork_DefaultKey();
     };
 
 }

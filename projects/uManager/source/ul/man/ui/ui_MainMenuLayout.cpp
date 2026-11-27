@@ -6,6 +6,7 @@
 #include <ul/util/util_Json.hpp>
 #include <ul/man/man_Manager.hpp>
 #include <ul/man/man_Network.hpp>
+#include <ul/man/man_Artwork.hpp>
 #include <ul/cfg/cfg_Config.hpp>
 #include <ul/os/os_Applications.hpp>
 #include <ul/os/os_System.hpp>
@@ -142,6 +143,10 @@ namespace ul::man::ui {
         this->update_menu_item->AddOnKey(std::bind(&MainMenuLayout::update_DefaultKey,this));
         this->options_menu->AddItem(this->update_menu_item);
 
+        this->artwork_menu_item=pu::ui::elm::MenuItem::New("SteamGridDB artwork");
+        this->artwork_menu_item->SetColor(MenuItemColor);
+        this->artwork_menu_item->AddOnKey(std::bind(&MainMenuLayout::artwork_DefaultKey,this));
+        this->options_menu->AddItem(this->artwork_menu_item);
         this->Add(this->options_menu);
 
         this->SetBackgroundColor(BackgroundColor);
@@ -202,6 +207,48 @@ namespace ul::man::ui {
 
             g_MainApplication->ShowNotification(GetLanguageString("reset_cache_success"));
         }
+    }
+
+    void MainMenuLayout::artwork_DefaultKey() {
+        const auto titles=ReadArtworkTitles();
+        if(titles.empty()){
+            g_MainApplication->CreateShowDialog("SteamGridDB","Export titles from GlassNX Settings > Homebrew first.",{"OK"},true);return;
+        }
+        size_t page=0;
+        ArtworkTitle chosen;
+        for(;;){
+            std::vector<std::string> options;
+            const auto start=page*4,end=std::min(start+4,titles.size());
+            for(size_t i=start;i<end;i++)options.push_back(titles[i].name);
+            options.push_back("Next page");options.push_back("Cancel");
+            const int c=g_MainApplication->CreateShowDialog("SteamGridDB","Choose a title from the exported library.",options,true);
+            if(c<0||c==int(options.size())-1)return;
+            if(c==int(end-start)){page=(page+1)%((titles.size()+3)/4);continue;}
+            if(c>=0&&c<int(end-start)){chosen=titles[start+c];break;}
+            return;
+        }
+        std::string err;
+        std::vector<ArtworkGame> games;
+        if(!FindArtworkGames(chosen.name,games,err)){
+            g_MainApplication->CreateShowDialog("SteamGridDB",err,{"OK"},true);return;
+        }
+        std::vector<std::string> opts;
+        for(const auto &game:games)opts.push_back(game.name);
+        opts.push_back("Cancel");
+        const int game=g_MainApplication->CreateShowDialog("Confirm match","Choose the matching SteamGridDB game.",opts,true);
+        if(game<0||game>=int(games.size()))return;
+        std::vector<ArtworkHero> heroes;
+        if(!FindArtworkHeroes(games[game].id,heroes,err)){
+            g_MainApplication->CreateShowDialog("SteamGridDB",err,{"OK"},true);return;
+        }
+        opts.clear();
+        for(size_t i=0;i<heroes.size();i++)opts.push_back("Hero "+std::to_string(i+1)+" ("+std::to_string(heroes[i].width)+"x"+std::to_string(heroes[i].height)+")");
+        opts.push_back("Cancel");
+        const int hero=g_MainApplication->CreateShowDialog("Choose artwork","JPG banners are listed in API order; previews are not available yet.",opts,true);
+        if(hero<0||hero>=int(heroes.size()))return;
+        if(g_MainApplication->CreateShowDialog("Import banner","Replace the existing custom hero for "+chosen.name+"?",{"Import","Cancel"},true)!=0)return;
+        const bool ok=InstallArtwork(chosen,heroes[hero],err);
+        g_MainApplication->CreateShowDialog("SteamGridDB",ok?"Saved. Restart GlassNX to refresh featured artwork.":err,{"OK"},true);
     }
 
     void MainMenuLayout::update_DefaultKey() {

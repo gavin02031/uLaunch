@@ -12,3 +12,6 @@ The API key is sent only to SteamGridDB over HTTPS; artwork requests do not incl
 
 ## Discord presence (not built in yet)
 Discord officially supports Rich Presence through desktop RPC and supported SDK platforms, not a native Horizon SDK. A separate optional presence bridge is preferable while testing launcher stability. Existing projects include https://github.com/SunResearchInstitute/SwitchPresence-Rewritten (requires a separate sysmodule and PC companion) and https://github.com/llsc12/SwitchRPC (separate native project). Neither is bundled or verified with GlassNX. Do not install additional sysmodules while diagnosing Atmosphere crashes. No Discord token, selfbot, Nintendo login or presence service is added to this update. A future opt-in bridge must clear activity on exit/sleep and be tested independently.
+
+## Direct import on Switch (v0.14 experimental)
+Export titles from Settings > Homebrew, then open GlassNX Manager > SteamGridDB artwork. Put your own API key in /glassnx/steamgriddb.key and a trusted CA bundle from https://curl.se/docs/caextract.html in /glassnx/cacert.pem. Select a matching game and JPG banner. No preview yet. Keep the key private and never upload it or include it in logs. This feature is untested on device; use the PC importer if TLS or artwork selection fails.

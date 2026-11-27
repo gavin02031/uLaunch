@@ -721,7 +721,7 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});
                         row("Artwork & Discord","Optional integrations",[](){
-                            g_MenuApplication->DisplayDialog("GlassNX integrations","SteamGridDB: import JPG hero art to /glassnx/art using the PC tool.\nDiscord: optional external presence companion; not connected in this version.",{"OK"},true);
+                            g_MenuApplication->DisplayDialog("GlassNX integrations","SteamGridDB: export titles, then open GlassNX Manager > SteamGridDB artwork. PC importer also supported.\nDiscord: optional external presence companion; not connected in this version.",{"OK"},true);
                         });
                         row("Export title list","For artwork imports",[this](){
                             auto fp=fopen("sdmc:/glassnx/titles.tsv.tmp","wb");
