@@ -45,6 +45,10 @@ namespace ul::menu::ui {
         void LoadCategories();
         bool SaveCategories();
         void TitleOptions();
+        bool SetArtworkKey();
+        void EditArtwork(u64 id,const std::string &name);
+        pu::sdl2::TextureHandle::Ref CustomIcon(u64 id);
+        std::map<u64,pu::sdl2::TextureHandle::Ref> custom_icons;
         void HeroShade(int x,int y,int w,int h);
         void BatteryGlyph(Renderer &r,int x,int y,int size);
         void Glyph(Renderer &r,const std::string &kind,int x,int y,int size);
@@ -118,7 +122,7 @@ namespace ul::menu::ui {
         s32 GetHeight() override {return 1080;}
         void RecordLaunch(u64 id);
         void PrepareTransition();
-        void Invalidate() {focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();banner.reset();banner_checked=false;}
+        void Invalidate() {focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}

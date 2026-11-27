@@ -15,3 +15,6 @@ Discord officially supports Rich Presence through desktop RPC and supported SDK 
 
 ## Direct import on Switch (v0.14 experimental)
 Export titles from Settings > Homebrew, then open GlassNX Manager > SteamGridDB artwork. Put your own API key in /glassnx/steamgriddb.key and a trusted CA bundle from https://curl.se/docs/caextract.html in /glassnx/cacert.pem. Select a matching game and JPG banner. No preview yet. Keep the key private and never upload it or include it in logs. This feature is untested on device; use the PC importer if TLS or artwork selection fails.
+
+## From a game's options
+In GlassNX highlight a title and press the right stick, then Change artwork. Enter your API key once in the on-device keyboard, choose Cover or Hero, confirm the matching title and preview/apply an image. Requires /glassnx/cacert.pem as above. Close games first; Safe Mode disables imports. Artwork changes affect GlassNX only.

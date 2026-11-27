@@ -1,4 +1,5 @@
 #include <ul/menu/ui/ui_GlassShell.hpp>
+#include <ul/menu/ui/ui_ArtworkClient.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/menu/ui/ui_Common.hpp>
 #include <algorithm>
@@ -49,7 +50,7 @@ namespace ul::menu::ui {
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
-        liquid_glass.Release();ClearMaterials();texts.clear();banner.reset();banner_checked=false;
+        liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();banner_checked=false;
         drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
     }
@@ -137,6 +138,119 @@ namespace ul::menu::ui {
         if(ok && rename(temp.c_str(),path.c_str())==0)return true;
         remove(temp.c_str());return false;
     }
+    bool GlassShell::SetArtworkKey() {
+        SwkbdConfig cfg;if(R_FAILED(swkbdCreate(&cfg,0)))return false;
+        swkbdConfigMakePresetDefault(&cfg);
+        swkbdConfigSetType(&cfg,SwkbdType_All);
+        swkbdConfigSetGuideText(&cfg,"Enter your SteamGridDB API key");
+        char result[129]={};const auto rc=ShowSwkbd(&cfg,result,sizeof(result));swkbdClose(&cfg);
+        if(R_FAILED(rc))return false;
+        const std::string key=result;
+        if(key.size()<16||key.size()>128||!std::all_of(key.begin(),key.end(),[](unsigned char c){return std::isalnum(c)||c=='-'||c=='_';})){
+            g_MenuApplication->ShowNotification("Invalid API key format");return false;
+        }
+        const char *path="sdmc:/glassnx/steamgriddb.key",*tmp="sdmc:/glassnx/steamgriddb.key.tmp";
+        auto fp=fopen(tmp,"wb");if(!fp)return false;
+        const bool wrote=fwrite(key.data(),1,key.size(),fp)==key.size(),closed=fclose(fp)==0;
+        if(!wrote||!closed||rename(tmp,path)!=0){remove(tmp);return false;}
+        return true;
+    }
+    void GlassShell::EditArtwork(u64 id,const std::string &name){
+        if(Conservative()){
+            g_MenuApplication->DisplayDialog("Artwork","Close any running game and disable Safe Mode before downloading artwork.",{"OK"},true);return;
+        }
+        char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(id));
+        const std::string root=std::string("sdmc:/glassnx/art/")+hex;
+        const int action=g_MenuApplication->DisplayDialog("Change artwork",name,{"Game cover","Hero banner","Restore defaults","API key","Cancel"},true);
+        if(action==3){if(SetArtworkKey())g_MenuApplication->ShowNotification("SteamGridDB key saved");return;}
+        if(action==2){
+            if(g_MenuApplication->DisplayDialog("Restore default artwork?","Remove custom cover and banner for this title.",{"Restore","Cancel"},true)==0){
+                remove((root+".cover").c_str());remove((root+".hero").c_str());remove((root+".jpg").c_str());
+                custom_icons.erase(id);banner.reset();banner_checked=false;
+            }
+            return;
+        }
+        if(action!=0&&action!=1)return;
+        const bool hero=action==1;
+        auto key=fopen("sdmc:/glassnx/steamgriddb.key","rb");
+        if(key)fclose(key);
+        else if(!SetArtworkKey())return;
+        PrepareTransition();
+        std::string error;
+        std::vector<art::ArtworkGame> games;
+        if(!art::FindArtworkGames(name,games,error)){
+            g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);return;
+        }
+        // Keep dialog option count bounded on the handheld display.
+        size_t game_page=0;int game=-1;
+        while(game<0){
+            const size_t begin=game_page*3,end=std::min(begin+3,games.size());
+            std::vector<std::string> labels;
+            for(size_t i=begin;i<end;i++)labels.push_back(games[i].name);
+            labels.push_back("Next");labels.push_back("Cancel");
+            const int chosen=g_MenuApplication->DisplayDialog("Choose matching game","Confirm the SteamGridDB title.",labels,true);
+            if(chosen<0||chosen==int(labels.size())-1)return;
+            if(chosen==int(end-begin)){game_page=(game_page+1)%((games.size()+2)/3);continue;}
+            if(chosen<int(end-begin))game=int(begin)+chosen;else return;
+        }
+        std::vector<art::ArtworkHero> pictures;
+        if(!art::FindPictures(games[game].id,hero,pictures,error)){
+            g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);return;
+        }
+        size_t i=0;
+        while(i<pictures.size()){
+            std::string data;
+            if(!art::DownloadPicture(pictures[i],hero,data,error)){
+                if(g_MenuApplication->DisplayDialog("Artwork unavailable",error,{"Next image","Cancel"},true)!=0)return;
+                ++i;continue;
+            }
+            // Decode only the bounded response, and render a small preview.
+            auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
+            auto image=rw?IMG_Load_RW(rw,1):nullptr;
+            if(!image){++i;continue;}
+            const float scale=std::min(360.f/image->w,220.f/image->h);
+            auto small=SDL_CreateRGBSurfaceWithFormat(0,std::max(1,int(image->w*scale)),std::max(1,int(image->h*scale)),32,SDL_PIXELFORMAT_RGBA32);
+            SDL_Texture *tex=nullptr;
+            if(small&&SDL_BlitScaled(image,nullptr,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
+            if(small)SDL_FreeSurface(small);
+            SDL_FreeSurface(image);
+            if(!tex){++i;continue;}
+            auto preview=pu::sdl2::TextureHandle::New(tex);
+            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size()),{"Apply","Next","Cancel"},true,preview);
+            if(pick==1){++i;continue;}
+            if(pick!=0)return;
+            if(art::SavePicture(root+(hero?".hero":".cover"),data,error)){
+                custom_icons.erase(id);banner.reset();banner_checked=false;
+                g_MenuApplication->ShowNotification("Custom artwork applied");
+            } else g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);
+            return;
+        }
+        g_MenuApplication->ShowNotification("No more matching artwork");
+    }
+    pu::sdl2::TextureHandle::Ref GlassShell::CustomIcon(u64 id){
+        if(Conservative())return {};
+        const auto it=custom_icons.find(id);if(it!=custom_icons.end())return it->second;
+        if(!icon_budget||custom_icons.size()>=24)return {};
+        char name[120]={};snprintf(name,sizeof(name),"sdmc:/glassnx/art/%016llx.cover",static_cast<unsigned long long>(id));
+        auto fp=fopen(name,"rb");if(!fp){custom_icons.emplace(id,pu::sdl2::TextureHandle::Ref{});return {};}
+        const auto size=fseek(fp,0,SEEK_END)==0?ftell(fp):-1;fclose(fp);
+        if(size<=0||size>3*1024*1024)return {};
+        icon_budget=false;
+        auto image=IMG_Load(name);if(!image)return {};
+        SDL_Texture *tex=nullptr;
+        if(image->w>0&&image->h>0&&image->w<=1024&&image->h<=1024){
+            auto small=SDL_CreateRGBSurfaceWithFormat(0,256,256,32,SDL_PIXELFORMAT_RGBA32);
+            if(small){
+                const int side=std::min(image->w,image->h);
+                SDL_Rect crop{(image->w-side)/2,(image->h-side)/2,side,side};
+                if(SDL_BlitScaled(image,&crop,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
+                SDL_FreeSurface(small);
+            }
+        }
+        SDL_FreeSurface(image);
+        auto value=tex?pu::sdl2::TextureHandle::New(tex):pu::sdl2::TextureHandle::Ref{};
+        custom_icons.emplace(id,value);return value;
+    }
     void GlassShell::TitleOptions() {
         auto list=List();
         if(focus<0||focus>=static_cast<int>(list.size()))return;
@@ -147,7 +261,8 @@ namespace ul::menu::ui {
         const auto id=e.app_info.app_id;
         char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(id));
         const std::string detail=std::string("Title ID: ")+hex+"\nUse Game or App to organize your library.";
-        const auto choice=g_MenuApplication->DisplayDialog(EntryName(e),detail,{"Game","App","Automatic","Cancel"},true);
+        const auto choice=g_MenuApplication->DisplayDialog(EntryName(e),detail,{"Game","App","Automatic","Change artwork","Cancel"},true);
+        if(choice==3){EditArtwork(id,EntryName(e));return;}
         if(choice<0||choice>2)return;
         const auto old=title_categories;
         if(choice==2)title_categories.erase(id);
@@ -276,7 +391,10 @@ namespace ul::menu::ui {
         banner_checked=true;banner_id=id;banner.reset();
         char name[120]={};
         snprintf(name,sizeof(name),"sdmc:/glassnx/art/%016llx.jpg",static_cast<unsigned long long>(id));
-        auto fp=fopen(name,"rb");if(!fp)return {};
+        char custom[120]={};snprintf(custom,sizeof(custom),"sdmc:/glassnx/art/%016llx.hero",static_cast<unsigned long long>(id));
+        auto fp=fopen(custom,"rb");
+        if(fp)snprintf(name,sizeof(name),"%s",custom);else fp=fopen(name,"rb");
+        if(!fp)return {};
         const bool seek_ok=fseek(fp,0,SEEK_END)==0;
         const long length=seek_ok?ftell(fp):-1;fclose(fp);
         if(length<=0||length>8*1024*1024)return {};
@@ -597,7 +715,8 @@ namespace ul::menu::ui {
         else if(e.Is<EntryType::SpecialEntryAlbum>()){system_glyph="album";accent={91,146,210,255};}
         else if(e.Is<EntryType::SpecialEntryAmiibo>()){system_glyph="amiibo";accent={153,117,207,255};}
         else if(e.Is<EntryType::Folder>()){system_glyph="folder";accent={99,147,220,255};}
-        auto icon=system_glyph?pu::sdl2::TextureHandle::Ref{}:entries->GlassIcon(index,icon_budget);
+        auto icon=e.Is<EntryType::Application>()?CustomIcon(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
+        if(!icon&&!system_glyph)icon=entries->GlassIcon(index,icon_budget);
         if(!icon && e.Is<EntryType::Application>()) icon=GetDefaultApplicationIconTexture();
         const int base_side=std::min(w-20,h-54);
         const int lift=selected&&motion&&!Conservative()?int(5*focus_lift):0;
@@ -744,7 +863,7 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});
                         row("Artwork & Discord","Optional integrations",[](){
-                            g_MenuApplication->DisplayDialog("GlassNX integrations","SteamGridDB: export titles, then open GlassNX Manager > SteamGridDB artwork. PC importer also supported.\nDiscord: optional external presence companion; not connected in this version.",{"OK"},true);
+                            g_MenuApplication->DisplayDialog("GlassNX integrations","SteamGridDB: select a game, press right stick, choose Change artwork. Enter your API key once.\nDiscord: optional external presence companion; not connected in this version.",{"OK"},true);
                         });
                         row("Export title list","For artwork imports",[this](){
                             auto fp=fopen("sdmc:/glassnx/titles.tsv.tmp","wb");
@@ -893,6 +1012,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;UpdateMotion();FrameDiagnostics();
+        if(custom_icons.size()>=24)custom_icons.clear();
         if(page!=Page::Settings||setting_section!=0)theme_previews.clear();
         if(enhanced_glass&&!Conservative()) {
             const auto wallpaper=ActiveWallpaper();const auto tint=WallpaperTint();
@@ -944,7 +1064,8 @@ namespace ul::menu::ui {
                 const auto idx=list[focus];auto &e=entries->GetEntries()[idx];
                 const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
                 auto wide=e.Is<EntryType::Application>()&&!Conservative()?Banner(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
-                auto icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
+                auto icon=e.Is<EntryType::Application>()?CustomIcon(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
+                if(!icon)icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
                 if(wide) {
                     RoundedArt(r,wide,85,155,1130,405,32);
                     HeroShade(105,175,1090,365);
@@ -979,6 +1100,7 @@ namespace ul::menu::ui {
             }
             Label(r,"Your games",75,600,37);
             Label(r,"R Stick  Options",385,606,27,330);
+            hits.push_back({380,590,330,55,[this](){TitleOptions();}});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close suspended game",1110,606,27,500);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
