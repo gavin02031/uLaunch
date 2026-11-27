@@ -42,8 +42,9 @@ jobs:
         test -s /etc/ssl/certs/ca-certificates.crt
         cp /etc/ssl/certs/ca-certificates.crt SdOut/glassnx/cacert.pem
         mkdir -p SdOut/glassnx/desktop-tools
-        cp tools/glassnx_artwork.py tools/GLASSNX-INTEGRATIONS.md SdOut/glassnx/desktop-tools/
-        python3 -m py_compile tools/glassnx_artwork.py
+        cp tools/glassnx_artwork.py tools/glassnx_presence.py tools/GLASSNX-INTEGRATIONS.md tools/GLASSNX-HARDWARE-QA.md SdOut/glassnx/desktop-tools/
+        python3 -m py_compile tools/glassnx_artwork.py tools/glassnx_presence.py
+        python3 tests/test_presence.py
         (cd SdOut && zip -r ../GlassNX-v0.15.zip atmosphere glassnx switch)
         unzip -t GlassNX-v0.15.zip
         python3 tools/check_glassnx_package.py GlassNX-v0.15.zip
