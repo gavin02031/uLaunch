@@ -61,3 +61,6 @@ Imported the GPU renderer and host tests from Codex PR #1 (16f6855). Enhanced GP
 
 ## v0.11 — Codex PR #1 integration
 Integrated the graphics contribution from 16f6855 into the stability/updater branch, with deliberate safety changes. Five-column game library with sidebar, refined highlights, typography, centered page indicators, smoothstep transition, and larger lock clock with static glass assets. Vertical control sliders retained from original design. Native 720p framebuffer scaling and GPU lock lens from PR are deferred until hardware stability is established. Mesa smoke test added to CI; tests are not device performance evidence. Hardware crash diagnosis still requires logs. For updating from v0.10 use the inner release ZIP as /glassnx/update.zip and the manager; keep an external SD backup. No live game framebuffer sampling.
+
+## v0.12 — close-game regression repair
+Hide the legacy screen-capture layer whenever GlassNX HOME is visible. Close releases its texture, resets alpha/state, invalidates the hero and clears suspended state after successful IPC. Failed captures are not uploaded. The backend checks for actual completion and no longer returns the original timeout after successful forced termination. Legacy fallback remains available. Device validation required.

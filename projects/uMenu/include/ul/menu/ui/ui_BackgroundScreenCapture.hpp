@@ -12,6 +12,7 @@ namespace ul::menu::ui {
 
     void RequestResumeScreenCaptureBackground();
     void RequestHideScreenCaptureBackground();
+    void ClearScreenCaptureBackground();
     void RequestHideLoseFocusScreenCaptureBackground();
     void RequestShowGainFocusScreenCaptureBackground();
     bool IsScreenCaptureBackgroundNotTransitioning();

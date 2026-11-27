@@ -67,12 +67,27 @@ namespace ul::system::app {
     }
 
     Result Terminate() {
-        UL_RC_TRY(appletApplicationTerminateAllLibraryApplets(&g_ApplicationHolder));
-        UL_RC_TRY(appletApplicationRequestExit(&g_ApplicationHolder));
-
-        const auto rc = eventWait(&g_ApplicationHolder.StateChangedEvent, 15'000'000'000ul);
-        if(rc == KERNELRESULT(TimedOut)) {
-            UL_RC_TRY(appletApplicationTerminate(&g_ApplicationHolder));
+        // A previously exited title can leave a valid but finished holder.
+        if(!serviceIsActive(&g_ApplicationHolder.s)) {
+            g_ApplicationHasFocus=false;
+            return ResultSuccess;
+        }
+        if(!appletApplicationCheckFinished(&g_ApplicationHolder)) {
+            const auto lib_rc=appletApplicationTerminateAllLibraryApplets(&g_ApplicationHolder);
+            if(R_FAILED(lib_rc) && !appletApplicationCheckFinished(&g_ApplicationHolder))return lib_rc;
+            const auto exit_rc=appletApplicationRequestExit(&g_ApplicationHolder);
+            if(R_FAILED(exit_rc) && !appletApplicationCheckFinished(&g_ApplicationHolder))return exit_rc;
+            if(!appletApplicationCheckFinished(&g_ApplicationHolder)) {
+                auto rc=eventWait(&g_ApplicationHolder.StateChangedEvent,15'000'000'000ul);
+                if(rc==KERNELRESULT(TimedOut)) {
+                    UL_RC_TRY(appletApplicationTerminate(&g_ApplicationHolder));
+                    if(!appletApplicationCheckFinished(&g_ApplicationHolder))
+                        rc=eventWait(&g_ApplicationHolder.StateChangedEvent,5'000'000'000ul);
+                    else rc=ResultSuccess;
+                }
+                if(R_FAILED(rc) && !appletApplicationCheckFinished(&g_ApplicationHolder))return rc;
+                if(!appletApplicationCheckFinished(&g_ApplicationHolder))return KERNELRESULT(TimedOut);
+            }
         }
 
         const auto app_rc = serviceDispatch(&g_ApplicationHolder.s, 30);
@@ -80,7 +95,7 @@ namespace ul::system::app {
 
         appletApplicationClose(&g_ApplicationHolder);
         g_ApplicationHasFocus = false;
-        return rc;
+        return ResultSuccess;
     }
 
     Result Start(const u64 app_id, const bool system, const AccountUid user_id, const void *data, const size_t size) {

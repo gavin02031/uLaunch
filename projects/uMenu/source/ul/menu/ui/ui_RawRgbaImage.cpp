@@ -3,7 +3,9 @@
 namespace ul::menu::ui {
 
     void RawRgbaImage::ClearImage() {
-        pu::ui::render::DeleteTexture(this->img_tex);
+        if(this->img_tex)pu::ui::render::DeleteTexture(this->img_tex);
+        this->img_tex=nullptr;
+        this->w=0;this->h=0;
     }
 
     void RawRgbaImage::LoadImage(const u8 *rgba_data, const s32 data_w, const s32 data_h, const u32 pix_num) {
@@ -20,7 +22,7 @@ namespace ul::menu::ui {
     }
 
     void RawRgbaImage::OnRender(pu::ui::render::Renderer::Ref &drawer, const s32 x, const s32 y) {
-        if(this->img_tex != nullptr) {
+        if(this->img_tex != nullptr && this->alpha!=0) {
             drawer->RenderTexture(this->img_tex, x, y, pu::ui::render::TextureRenderOptions(this->alpha, this->w, this->h, {}, {}, {}));
         }
     }

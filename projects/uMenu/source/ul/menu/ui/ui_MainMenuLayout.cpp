@@ -603,7 +603,7 @@ namespace ul::menu::ui {
             this->cur_entry_sub_text->SetVisible(false);
         }
 
-        if(g_GlobalSettings.IsSuspended() && has_prev_entry) {
+        if(!this->glass_mode && g_GlobalSettings.IsSuspended() && has_prev_entry) {
             if(is_prev_entry_suspended && !is_cur_entry_suspended) {
                 RequestHideLoseFocusScreenCaptureBackground();
             }
@@ -865,6 +865,9 @@ namespace ul::menu::ui {
     void MainMenuLayout::SetGlassMode(bool enabled) {
         this->glass_mode = enabled;
         this->glass_shell->SetVisible(enabled);
+        // The legacy capture must never be composited over GlassNX HOME.
+        GetScreenCaptureBackground()->SetVisible(!enabled);
+        if(enabled)RequestHideScreenCaptureBackground();
         UL_LOG_INFO("GlassNX: shell visibility %d", int(enabled));
         this->entry_menu->SetVisible(!enabled);
         this->entry_menu->SetEnabled(!enabled);
@@ -1199,9 +1202,13 @@ namespace ul::menu::ui {
             i++;
         }
 
+        if(!g_GlobalSettings.IsSuspended())return;
         const auto rc=smi::TerminateApplication();
         if(R_FAILED(rc)) {UL_LOG_WARN("GlassNX terminate failed: 0x%x",rc);g_MenuApplication->ShowNotification("Could not close game");return;}
-        if(this->glass_shell)this->glass_shell->PrepareTransition();
+        g_GlobalSettings.ResetSuspendedApplication();
+        ClearScreenCaptureBackground();
+        if(this->glass_shell){this->glass_shell->PrepareTransition();this->glass_shell->Invalidate();}
+        this->input_bar_changed=true;
 
         if(i < entries.size()) {
             // We need to reload the application record since its kind/type changed after closing it
@@ -1209,9 +1216,7 @@ namespace ul::menu::ui {
             entries.at(i).ReloadApplicationInfo();
         }
 
-        g_GlobalSettings.ResetSuspendedApplication();
-
-        RequestHideScreenCaptureBackground();
+        UL_LOG_INFO("GlassNX: closed application and discarded capture");
     }
 
 }

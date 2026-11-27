@@ -37,20 +37,24 @@ namespace ul::menu::ui {
     
     void InitializeScreenCaptures(const smi::MenuStartMode start_mode) {
         g_ScreenCaptureBackground = RawRgbaImage::New(0, 0);
+        g_ScreenCaptureBackgroundAlpha=0xFF;
+        g_ScreenCaptureBackgroundMode=SuspendedImageMode::ShowingAfterStart;
         if(start_mode != smi::MenuStartMode::StartupMenuPostBoot) {
             auto capture_buf = new u8[CaptureBufferSize]();
-            bool flag;
+            bool flag=false;
+            Result capture_rc=0;
             if(g_GlobalSettings.IsSuspended()) {
                 // Get last app capture image
-                appletGetLastApplicationCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
+                capture_rc=appletGetLastApplicationCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
             }
             else {
                 // Get last applet capture image
-                appletGetLastForegroundCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
+                capture_rc=appletGetLastForegroundCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
             }
             appletClearCaptureBuffer(true, AppletCaptureSharedBuffer_CallerApplet, 0xFF000000);
 
-            g_ScreenCaptureBackground->LoadImage(capture_buf, CaptureBufferWidth, CaptureBufferHeight, CaptureBufferBytesPerPixel);
+            if(R_SUCCEEDED(capture_rc) && flag)g_ScreenCaptureBackground->LoadImage(capture_buf, CaptureBufferWidth, CaptureBufferHeight, CaptureBufferBytesPerPixel);
+            else delete[] capture_buf;
 
             // Force-scale to 1080p
             g_ScreenCaptureBackground->SetWidth(pu::ui::render::ScreenWidth);
@@ -71,20 +75,27 @@ namespace ul::menu::ui {
     void RequestResumeScreenCaptureBackground() {
         if(!g_GlobalSettings.IsSuspended() || IsScreenCaptureResumePending())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::HidingForResume;
+        if(!HasScreenCaptureBackground() || !g_ScreenCaptureBackground->IsVisible())g_ScreenCaptureBackgroundAlpha=0xFF;
     }
 
     void RequestHideScreenCaptureBackground() {
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::NotFocused;
+        g_ScreenCaptureBackgroundAlpha=0;
         g_ScreenCaptureBackground->SetAlpha(0);
     }
 
+    void ClearScreenCaptureBackground() {
+        RequestHideScreenCaptureBackground();
+        g_ScreenCaptureBackground->ClearImage();
+    }
+
     void RequestHideLoseFocusScreenCaptureBackground() {
-        if(IsScreenCaptureResumePending())return;
+        if(IsScreenCaptureResumePending() || !HasScreenCaptureBackground())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::HidingLostFocus;
     }
 
     void RequestShowGainFocusScreenCaptureBackground() {
-        if(IsScreenCaptureResumePending())return;
+        if(IsScreenCaptureResumePending() || !g_GlobalSettings.IsSuspended() || !HasScreenCaptureBackground())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::ShowingGainedFocus;
     }
 
@@ -101,6 +112,11 @@ namespace ul::menu::ui {
     }
 
     void UpdateScreenCaptureBackground(const bool after_start_stay_at_min_alpha) {
+        if(!g_GlobalSettings.IsSuspended() && g_ScreenCaptureBackgroundMode!=SuspendedImageMode::ShowingAfterStart) {
+            if(HasScreenCaptureBackground())ClearScreenCaptureBackground();
+            return;
+        }
+        if(!HasScreenCaptureBackground() && !IsScreenCaptureResumePending()) {RequestHideScreenCaptureBackground();return;}
         switch(g_ScreenCaptureBackgroundMode) {
             case SuspendedImageMode::ShowingAfterStart: {
                 if(after_start_stay_at_min_alpha && (g_ScreenCaptureBackgroundAlpha <= g_ScreenCaptureBackgroundMinimumAlpha)) {
