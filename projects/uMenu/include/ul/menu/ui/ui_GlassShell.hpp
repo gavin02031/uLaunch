@@ -52,6 +52,16 @@ namespace ul::menu::ui {
         void ReadRecent();
         void SaveRecent();
         std::vector<u8> backdrop;
+        pu::sdl2::TextureHandle::Ref theme_wallpaper;
+        std::map<int,pu::sdl2::TextureHandle::Ref> theme_previews;
+        pu::sdl2::TextureHandle::Ref LoadWallpaper(int index,bool preview);
+        pu::sdl2::TextureHandle::Ref ActiveWallpaper();
+        pu::ui::Color WallpaperTint() const;
+        void FrameDiagnostics();
+        bool diagnostics=false;
+        std::chrono::steady_clock::time_point frame_tick{},frame_window{};
+        unsigned frame_count=0;
+        float frame_ms=0,frame_max=0,display_fps=0,display_max=0;
         std::chrono::steady_clock::time_point transition{};
         pu::sdl2::TextureHandle::Ref banner;
         u64 banner_id = 0;

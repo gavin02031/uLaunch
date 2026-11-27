@@ -196,8 +196,45 @@ namespace ul::menu::ui {
         if(ok && rename(temp.c_str(),PrefsPath())==0)return;
         remove(temp.c_str());g_MenuApplication->ShowNotification("Could not save appearance settings");
     }
+    pu::sdl2::TextureHandle::Ref GlassShell::LoadWallpaper(int index,bool preview) {
+        static const char *names[]={"PastelDream","MidnightGlass","FrostedWhite","Aurora"};
+        const auto path=std::string("sdmc:/glassnx/wallpapers/")+names[std::clamp(index,0,3)]+(preview?"-preview.jpg":".jpg");
+        auto fp=fopen(path.c_str(),"rb");if(!fp)return {};
+        const long bytes=fseek(fp,0,SEEK_END)==0?ftell(fp):-1;fclose(fp);
+        if(bytes<=0||bytes>(preview?128*1024:2*1024*1024))return {};
+        // The supplied pack has fixed dimensions. Reject unexpected decoded sizes.
+        auto surface=IMG_Load(path.c_str());
+        if(!surface)return {};
+        const int w=preview?320:1280,h=preview?180:720;
+        SDL_Texture *tex=nullptr;
+        if(surface->w==w&&surface->h==h)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),surface);
+        SDL_FreeSurface(surface);
+        return tex?pu::sdl2::TextureHandle::New(tex):pu::sdl2::TextureHandle::Ref{};
+    }
+    pu::sdl2::TextureHandle::Ref GlassShell::ActiveWallpaper() {
+        return theme_wallpaper?theme_wallpaper:GetBackgroundTexture();
+    }
+    pu::ui::Color GlassShell::WallpaperTint() const {
+        // Subtle scrim on bright wallpapers keeps white system labels legible.
+        if(theme_wallpaper){
+            constexpr pu::ui::Color scrims[]={{31,27,53,115},{0,0,0,0},{27,34,52,150},{10,24,38,80}};
+            return scrims[theme];
+        }
+        return Tints[theme];
+    }
+    void GlassShell::FrameDiagnostics(){
+        const auto now=std::chrono::steady_clock::now();
+        if(!diagnostics){frame_tick={};return;}
+        if(frame_tick.time_since_epoch().count()==0){frame_tick=frame_window=now;frame_count=0;frame_max=0;return;}
+        const float ms=std::chrono::duration<float,std::milli>(now-frame_tick).count();
+        frame_tick=now;
+        if(ms>1000){frame_window=now;frame_count=0;frame_max=0;return;}
+        ++frame_count;frame_max=std::max(frame_max,ms);
+        const float seconds=std::chrono::duration<float>(now-frame_window).count();
+        if(seconds>=2.f){display_fps=frame_count/seconds;display_max=frame_max;frame_count=0;frame_max=0;frame_window=now;}
+    }
     void GlassShell::SetTheme(int index) {
-        theme=std::clamp(index,0,3);ClearMaterials();SavePreferences();
+        liquid_glass.Release();theme_wallpaper.reset();theme=std::clamp(index,0,3);LoadBackdrop();ClearMaterials();texts.clear();SavePreferences();
         transition=std::chrono::steady_clock::now();
     }
     bool GlassShell::Favorite(u64 id) const {return std::find(favorites.begin(),favorites.end(),id)!=favorites.end();}
@@ -219,7 +256,11 @@ namespace ul::menu::ui {
         if(R_SUCCEEDED(rc)){search=result;focus=offset=0;}
     }
     void GlassShell::LoadBackdrop() {
-        const auto path=TryFindImage("ui/Background");if(path.empty())return;
+        backdrop.clear();
+        theme_wallpaper=LoadWallpaper(theme,false);
+        static const char *names[]={"PastelDream","MidnightGlass","FrostedWhite","Aurora"};
+        const auto path=theme_wallpaper?std::string("sdmc:/glassnx/wallpapers/")+names[theme]+".jpg":TryFindImage("ui/Background");
+        if(path.empty())return;
         auto src=IMG_Load(path.c_str());if(!src)return;
         auto small=SDL_CreateRGBSurfaceWithFormat(0,240,135,32,SDL_PIXELFORMAT_RGBA32);
         if(small && SDL_BlitScaled(src,nullptr,small,nullptr)==0 && SDL_LockSurface(small)==0) {
@@ -345,13 +386,13 @@ namespace ul::menu::ui {
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float angle=.28f+.72f*(1-v)*(1-v);
             const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
-            const float shine=(1.f-v)*.06f+reflection*.035f+rim*(selected?.64f:.43f)*angle+light*.08f;
+            const float shine=(1.f-v)*.045f+reflection*.055f+rim*(selected?.66f:.48f)*angle+light*.055f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
             // Sample the real wallpaper with a low-frequency blur and edge
             // displacement. Cached per panel position, never reads the GPU framebuffer.
-            const float edge=std::max(0.f,1.f-std::abs(d)/6.f);
-            const int sx=std::clamp(int((x+px*4+(px-tw*.5f)*edge*.11f)/8.f),0,239);
-            const int sy=std::clamp(int((y+py*4+(py-th*.5f)*edge*.11f)/8.f),0,134);
+            const float edge=std::max(0.f,1.f-std::abs(d+1.f)/6.f);
+            const int sx=std::clamp(int((x+px*4+(px-tw*.5f)*edge*.17f)/8.f),0,239);
+            const int sy=std::clamp(int((y+py*4+(py-th*.5f)*edge*.17f)/8.f),0,134);
             const int radius_sample=blur/15;
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
@@ -361,11 +402,11 @@ namespace ul::menu::ui {
                     for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
                         sum+=backdrop[(std::clamp(sy+dy*radius_sample,0,134)*240+std::clamp(sx+dx*radius_sample,0,239))*4+k];
                     bg=sum/9.f;
-                    const auto shade=Tints[theme];
+                    const auto shade=WallpaperTint();
                     const float sc=k==0?shade.r:k==1?shade.g:shade.b;
                     bg=bg*(1-shade.a/255.f)+sc*(shade.a/255.f);
                 }
-                const float colored=bg*.72f+tc*.28f;
+                const float colored=bg*.81f+tc*.19f;
                 rgba[p+k]=byte(colored+(255-colored)*shine);
             }
             rgba[p+3]=byte(cover*((100-glass)*1.15f+(gpu?30.f:92.f)+20*(1-v)+rim*(selected?112:77)+light*14));
@@ -440,6 +481,15 @@ namespace ul::menu::ui {
     }
     void GlassShell::Glyph(Renderer &r,const std::string &kind,int x,int y,int size) {
         const pu::ui::Color white{246,249,255,255};
+        auto arc=[&](float cx,float cy,float rad,float start,float end){
+            auto rr=pu::ui::render::GetMainRenderer();
+            SDL_SetRenderDrawColor(rr,246,249,255,255);
+            for(int j=0;j<16;j++){
+                const float a=(start+(end-start)*j/16.f)*3.14159265f/180.f;
+                const float b=(start+(end-start)*(j+1)/16.f)*3.14159265f/180.f;
+                for(int k=-1;k<=1;k++)SDL_RenderDrawLine(rr,x+int((cx+rad*cosf(a))*size/24)+k,y+int((cy+rad*sinf(a))*size/24),x+int((cx+rad*cosf(b))*size/24)+k,y+int((cy+rad*sinf(b))*size/24));
+            }
+        };
         auto line=[&](int a,int b,int c,int d) {
             auto rr=pu::ui::render::GetMainRenderer();
             SDL_SetRenderDrawColor(rr,246,249,255,255);
@@ -451,13 +501,13 @@ namespace ul::menu::ui {
         else if(kind=="games"){box(2,6,20,13);line(6,10,6,16);line(3,13,9,13);dot(16,11,1);dot(19,15,1);}
         else if(kind=="apps"){for(int a:{3,13})for(int b:{3,13})box(a,b,8,8);}
         else if(kind=="settings"){r->RenderCircle(white,x+size/2,y+size/2,size/4);for(int i=0;i<8;i++){float a=i*3.14159265f/4;line(12+int(7*cosf(a)),12+int(7*sinf(a)),12+int(11*cosf(a)),12+int(11*sinf(a)));}dot(12,12,2);}
-        else if(kind=="wifi"){for(int i=0;i<3;i++){int span=10-i*3;line(12-span,6+i*4,12,3+i*4);line(12,3+i*4,12+span,6+i*4);}dot(12,20,2);}
+        else if(kind=="wifi"){arc(12,19,15,225,315);arc(12,19,10,225,315);arc(12,19,5,225,315);dot(12,20,1);}
         else if(kind=="bluetooth"){line(12,2,12,22);line(12,2,19,8);line(19,8,5,19);line(5,5,19,16);line(19,16,12,22);}
         else if(kind=="sun"){r->RenderCircle(white,x+size/2,y+size/2,size/5);for(int i=0;i<8;i++){float a=i*3.14159265f/4;line(12+int(7*cosf(a)),12+int(7*sinf(a)),12+int(11*cosf(a)),12+int(11*sinf(a)));}}
         else if(kind=="volume"){box(2,9,5,6);line(7,9,13,4);line(13,4,13,20);line(13,20,7,15);line(17,7,21,12);line(21,12,17,17);}
-        else if(kind=="lock"){box(5,10,14,12);line(8,10,8,5);line(8,5,16,5);line(16,5,16,10);dot(12,16,1);}
-        else if(kind=="power"){r->RenderCircle(white,x+size/2,y+size/2,size*2/5);line(12,1,12,12);}
-        else if(kind=="bell"){box(5,4,14,14);line(2,18,22,18);dot(12,21,1);}
+        else if(kind=="lock"){box(5,10,14,12);arc(12,8,4,180,360);line(8,8,8,10);line(16,8,16,10);dot(12,16,1);}
+        else if(kind=="power"){arc(12,13,9,-53,233);line(12,1,12,12);}
+        else if(kind=="bell"){arc(12,10,6,180,360);line(6,10,6,15);line(18,10,18,15);line(6,15,3,19);line(18,15,21,19);line(3,19,21,19);arc(12,19,3,0,180);}
         else if(kind=="moon"){r->RenderCircle(white,x+size/2,y+size/2,size*2/5);line(15,3,9,12);line(9,12,18,20);}
         else if(kind=="album"){box(2,3,20,18);line(3,19,10,10);line(10,10,15,16);line(15,16,19,11);dot(17,7,2);}
         else if(kind=="battery"){box(2,6,18,12);r->RenderRectangleFill(white,x+size*20/24,y+size*10/24,size*2/24,size*4/24);}
@@ -627,10 +677,11 @@ namespace ul::menu::ui {
         Label(r,name,x+w/2,y+22,30,w-18,true);
         Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w/2,y+70,30,0,true);
         const int left=x+46,top=y+115,width=w-92,height=h-166;
-        r->RenderRoundedRectangleFill({32,38,74,110},left,top,width,height,std::min(34,width/2));
+        r->RenderRoundedRectangleFill({15,24,52,138},left,top,width,height,width/2);
+        r->RenderRoundedRectangle({217,232,255,80},left,top,width,height,width/2);
         if(value>=0) {
             const int amount=int(height*value);
-            if(amount>0)r->RenderRoundedRectangleFill({219,229,255,225},left,top+height-amount,width,amount,std::min(34,amount/2));
+            if(amount>0)r->RenderRoundedRectangleFill({219,232,255,235},left+3,top+height-amount,width-6,amount,std::min((width-6)/2,amount/2));
         }
         Glyph(r,name=="Brightness"?"sun":"volume",x+w/2-22,y+h-44,44);
     }
@@ -686,10 +737,11 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.13",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.14",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
+                        row("Performance overlay",diagnostics?"Enabled":"Disabled",[this](){diagnostics=!diagnostics;frame_tick={};display_fps=display_max=0;});
                         row("Recovery","Legacy interface",legacy);break;
                 }
                 return c;
@@ -817,17 +869,18 @@ namespace ul::menu::ui {
         if(fill>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245},x+4,y+size/4+4,fill,height-8,std::min(4,fill/2));
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
-        hits.clear();icon_budget=true;UpdateMotion();
+        hits.clear();icon_budget=true;UpdateMotion();FrameDiagnostics();
+        if(page!=Page::Settings||setting_section!=0)theme_previews.clear();
         if(enhanced_glass&&!Conservative()) {
-            const auto wallpaper=GetBackgroundTexture();const auto tint=Tints[theme];
+            const auto wallpaper=ActiveWallpaper();const auto tint=WallpaperTint();
             liquid_glass.Prepare(pu::ui::render::GetMainRenderer(),wallpaper?wallpaper->Get():nullptr,blur,{tint.r,tint.g,tint.b,tint.a});
         } else if(liquid_glass.IsReady())liquid_glass.Release();
         if(page==Page::Home || page==Page::Control || (page==Page::Settings && setting_section==5))ReadMetrics();
-        Picture(r,GetBackgroundTexture(),0,0,1920,1080);
-        if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
+        Picture(r,ActiveWallpaper(),0,0,1920,1080);
+        const auto scrim=WallpaperTint();if(scrim.a)r->RenderRectangleFill(scrim,0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.13 · SAFE":"v0.13",130,76,27);
+        Label(r,safe_mode?"v0.14 · SAFE":"v0.14",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -842,6 +895,11 @@ namespace ul::menu::ui {
         Label(r,Battery(),1690,43,30);
         BatteryGlyph(r,1805,40,38);
         hits.push_back({1470,25,380,80,[this](){SetPage(Page::Control);}});
+        if(diagnostics){
+            char stats[90]={};snprintf(stats,sizeof(stats),"%.1f FPS | max %.1f ms",display_fps,display_max);
+            r->RenderRoundedRectangleFill({16,22,45,215},1420,102,430,45,18);
+            Label(r,stats,1435,107,27,400);
+        }
 
         if(page==Page::Home) {
             auto list=List();
@@ -956,8 +1014,10 @@ namespace ul::menu::ui {
                     Label(r,"Theme",466,265,30);
                     for(int i=0;i<4;i++) {
                         const int x=466+i*344;
-                        RoundedArt(r,GetBackgroundTexture(),x+6,321,308,113,22);
-                        if(Tints[i].a)r->RenderRoundedRectangleFill(Tints[i],x+6,321,308,113,22);
+                        auto it=theme_previews.find(i);
+                        if(it==theme_previews.end())it=theme_previews.emplace(i,LoadWallpaper(i,true)).first;
+                        RoundedArt(r,it->second?it->second:GetBackgroundTexture(),x+6,321,308,113,22);
+                        if(!it->second&&Tints[i].a)r->RenderRoundedRectangleFill(Tints[i],x+6,321,308,113,22);
                         if(theme==i)r->RenderRoundedRectangle({233,240,255,255},x+3,318,314,119,24);
                         Label(r,Themes[i],x+160,443,27,305,true);
                         hits.push_back({x,315,320,125,[this,i](){SetTheme(i);}});
