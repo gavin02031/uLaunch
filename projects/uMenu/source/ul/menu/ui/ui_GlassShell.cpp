@@ -607,8 +607,15 @@ namespace ul::menu::ui {
         for(int i=0;i<5;i++){
             const int x=390+i*230;
             if(dock_focus==i)ul::glassnx::DrawSurface(r,x,931,220,110,42,{146,170,230,130},true);
-            Glyph(r,icons[i],x+88,941,44);
-            Label(r,names[i],x+110,994,27,208,true);
+            const bool selected=dock_focus==i;
+            const int side=selected?76:68,ix=x+110-side/2,iy=932-(selected?3:0);
+            if(auto tile=SystemSymbol(icons[i],true))Picture(r,tile,ix,iy,side,side);
+            else {
+                ul::glassnx::DrawSurface(r,ix,iy,side,side,20,{100,135,198,172},selected);
+                const int glyph=side/2;
+                Glyph(r,icons[i],ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
+            }
+            Label(r,names[i],x+110,1007,27,208,true);
             hits.push_back({x,928,220,116,[this,i](){ActivateDock(i);}});
         }
         const auto alerts=g_MenuApplication->GetNotificationHistory().size();
@@ -1140,8 +1147,10 @@ namespace ul::menu::ui {
         Label(r,name,x+w/2,y+22,30,w-18,true);
         Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w/2,y+70,30,0,true);
         const int left=x+46,top=y+115,width=w-92,height=h-166;
-        r->RenderRoundedRectangleFill({15,24,52,170},left,top,width,height,width/2);
-        r->RenderRoundedRectangle({217,232,255,80},left,top,width,height,width/2);
+        const int track_radius=std::max(1,std::min(width,height)/2-2);
+        r->RenderRoundedRectangleFill({15,24,52,170},left,top,width,height,track_radius);
+        r->RenderRectangleFill({15,24,52,255},left,top+track_radius,width,height-2*track_radius);
+        r->RenderRoundedRectangle({217,232,255,80},left,top,width,height,track_radius);
         if(value>=0) {
             const int amount=int(height*std::clamp(value,0.f,1.f));
             if(amount>0){
@@ -1451,13 +1460,11 @@ namespace ul::menu::ui {
                 Label(r,EntryName(e),122,350,45,610);
                 Label(r,suspended?"Suspended":(e.Is<EntryType::Application>() && std::find(recent.begin(),recent.end(),e.app_info.app_id)!=recent.end()?"Recently played":"Ready to play"),122,410,27,610);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
-                Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
                 if(suspended) {
-                    r->RenderRoundedRectangleFill({126,56,89,160},790,455,300,68,34);
-                    r->RenderRoundedRectangle({255,198,211,130},790,455,300,68,34);
-                    Label(r,"X  Close Game",940,471,27,270,true);
-                    hits.push_back({790,455,300,68,[this](){OpenCloseSheet();}});
-                }
+                    ul::glassnx::DrawSurface(r,380,445,300,78,38,{144,62,96,180});
+                    Label(r,"X  Close game",530,467,30,270,true);
+                    hits.push_back({380,445,300,78,[this](){OpenCloseSheet();}});
+                } else Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
             } else {
                 Label(r,"Your home awaits",112,245,64);
                 Label(r,"Add or organize entries in the legacy menu.",112,355,30);
