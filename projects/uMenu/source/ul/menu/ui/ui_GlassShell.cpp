@@ -514,6 +514,12 @@ namespace ul::menu::ui {
         else if(kind=="storage"){box(3,5,18,14);line(5,14,19,14);dot(17,17,1);}
         else if(kind=="clock"){r->RenderCircle(white,x+size/2,y+size/2,size*2/5);line(12,5,12,12);line(12,12,17,15);}
         else if(kind=="star"){for(int i=0;i<10;i++){float a=(-90+i*36)*3.14159265f/180,b=(-90+(i+1)*36)*3.14159265f/180;float ra=i%2?4.5f:10.f,rb=i%2?10.f:4.5f;line(12+int(ra*cosf(a)),12+int(ra*sinf(a)),12+int(rb*cosf(b)),12+int(rb*sinf(b)));}}
+        else if(kind=="profile"){r->RenderCircle(white,x+size/2,y+size*7/24,size*4/24);arc(12,22,8,180,360);}
+        else if(kind=="browser"){r->RenderCircle(white,x+size/2,y+size/2,size*10/24);arc(12,12,6,90,270);arc(12,12,6,-90,90);line(2,12,22,12);}
+        else if(kind=="palette"){box(3,3,18,18);dot(8,8,2);dot(16,8,2);dot(8,16,2);dot(16,16,2);}
+        else if(kind=="amiibo"){arc(12,12,9,10,160);arc(12,12,9,190,340);dot(12,12,3);dot(12,2,1);dot(12,22,1);}
+        else if(kind=="mii"){r->RenderCircle(white,x+size/2,y+size/2,size*10/24);dot(8,9,1);dot(16,9,1);arc(12,13,5,15,165);}
+        else if(kind=="folder"){box(2,7,20,14);line(3,7,3,4);line(3,4,10,4);line(10,4,13,7);}
         else if(kind=="search"){r->RenderCircle(white,x+size*9/24,y+size*9/24,size*7/24);line(14,14,22,22);}
         else {box(3,3,18,18);dot(12,12,2);}
     }
@@ -580,7 +586,18 @@ namespace ul::menu::ui {
     void GlassShell::Tile(Renderer &r,u32 index,int x,int y,int w,int h,bool selected) {
         if(selected)r->RenderRoundedRectangleFill({150,168,229,static_cast<u8>(motion?45+40*focus_lift:85)},x,y,w,h,32);
         auto &e=entries->GetEntries().at(index);
-        auto icon=entries->GlassIcon(index,icon_budget);
+        const char *system_glyph=nullptr;
+        pu::ui::Color accent{99,125,195,255};
+        if(e.Is<EntryType::SpecialEntryMiiEdit>()){system_glyph="mii";accent={154,109,181,255};}
+        else if(e.Is<EntryType::SpecialEntryWebBrowser>()){system_glyph="browser";accent={67,146,195,255};}
+        else if(e.Is<EntryType::SpecialEntryUserPage>()){system_glyph="profile";accent={111,139,216,255};}
+        else if(e.Is<EntryType::SpecialEntrySettings>()){system_glyph="settings";accent={98,114,153,255};}
+        else if(e.Is<EntryType::SpecialEntryThemes>()){system_glyph="palette";accent={186,112,164,255};}
+        else if(e.Is<EntryType::SpecialEntryControllers>()){system_glyph="games";accent={77,154,174,255};}
+        else if(e.Is<EntryType::SpecialEntryAlbum>()){system_glyph="album";accent={91,146,210,255};}
+        else if(e.Is<EntryType::SpecialEntryAmiibo>()){system_glyph="amiibo";accent={153,117,207,255};}
+        else if(e.Is<EntryType::Folder>()){system_glyph="folder";accent={99,147,220,255};}
+        auto icon=system_glyph?pu::sdl2::TextureHandle::Ref{}:entries->GlassIcon(index,icon_budget);
         if(!icon && e.Is<EntryType::Application>()) icon=GetDefaultApplicationIconTexture();
         const int base_side=std::min(w-20,h-54);
         const int lift=selected&&motion&&!Conservative()?int(5*focus_lift):0;
@@ -588,8 +605,14 @@ namespace ul::menu::ui {
         const int ix=x+(w-side)/2,iy=y+5-lift;
         const int rounding=std::max(20,side/6);
         r->RenderRoundedRectangleFill({15,20,45,65},ix,iy+5,side,side,rounding);
-        if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
-        else {Card(r,ix,iy,side,side);Glyph(r,e.Is<EntryType::Folder>()?"storage":"apps",x+w/2-34,y+h/2-55,68);}
+        if(system_glyph){
+            r->RenderRoundedRectangleFill({accent.r,accent.g,accent.b,195},ix,iy,side,side,rounding);
+            r->RenderRoundedRectangleFill({224,236,255,38},ix+5,iy+5,side-10,side-10,rounding-3);
+            r->RenderRoundedRectangle({234,242,255,130},ix,iy,side,side,rounding);
+            const int glyph=side*54/100;
+            Glyph(r,system_glyph,ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
+        } else if(icon)RoundedArt(r,icon,ix,iy,side,side,rounding);
+        else {Card(r,ix,iy,side,side);Glyph(r,"apps",x+w/2-34,y+h/2-55,68);}
         if(selected)r->RenderRoundedRectangle({224,236,255,225},ix-3,iy-3,side+6,side+6,rounding+3);
         const auto name=EntryName(e);
         Label(r,name,x+w/2,y+h-35,27,w-10,true);
@@ -907,6 +930,8 @@ namespace ul::menu::ui {
             Card(r,70,140,1160,435);
             Card(r,1260,140,590,205);Card(r,1260,365,590,210);
             Glyph(r,"battery",1298,167,32);Label(r,"System",1345,166,30);
+            hits.push_back({1260,140,590,205,[this](){SetPage(Page::Control);}});
+            hits.push_back({1260,365,590,210,[this](){SetPage(Page::Settings);Section(5);}});
             Label(r,Battery(),1300,214,64);Label(r,temperature<0?"Temperature N/A":std::to_string(temperature)+" C",1530,241,30,275);
             Glyph(r,"storage",1298,392,32);Label(r,"Storage",1345,391,30);
             Label(r,StorageText(),1300,446,45,500);
@@ -953,7 +978,7 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
-            Label(r,"R Stick  Options",370,606,27,330);
+            Label(r,"R Stick  Options",385,606,27,330);
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close suspended game",1110,606,27,500);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
