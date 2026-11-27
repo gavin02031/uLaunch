@@ -1536,7 +1536,7 @@ namespace ul::menu::ui {
                 if(suspended){
                     r->RenderRoundedRectangleFill({94,156,139,205},122,320,14,14,9);
                     Label(r,"CONTINUE PLAYING",150,310,27,570);
-                }else Label(r,"READY TO PLAY",122,310,27);
+                }else Label(r,"SELECTED GAME",122,310,27);
                 Label(r,EntryName(e),122,350,45,610);
                 Label(r,suspended?"Suspended":(e.Is<EntryType::Application>() && std::find(recent.begin(),recent.end(),e.app_info.app_id)!=recent.end()?"Recently played":"Ready to play"),122,410,27,610);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
@@ -1632,8 +1632,8 @@ namespace ul::menu::ui {
                 Label(r,"Display & sound",790,212,27,490);
                 Glyph(r,"games",1340,281,42);Label(r,"System state",1398,280,37,390);
                 const bool suspended=g_GlobalSettings.IsSuspended();
-                Label(r,suspended?"Game suspended":"Home active",1340,351,45,455);
-                Label(r,safe_mode?"Safe rendering":suspended?"Conservative rendering":enhanced_glass?"Enhanced glass (experimental)":"Standard Prism rendering",1340,422,30,455);
+                Label(r,suspended?"Game suspended":"Shell active",1340,351,45,455);
+                Label(r,safe_mode?"Safe rendering":suspended?"Conservative rendering":enhanced_glass?(liquid_glass.IsReady()?"Enhanced glass (experimental)":"Enhanced glass requested"):"Standard Prism rendering",1340,422,30,455);
                 Label(r,"Clocks not managed by GlassNX",1340,490,27,455);
                 Card(r,780,770,500,175);Label(r,"Battery",810,790,30);Label(r,Battery(),810,842,64);
                 Card(r,1310,770,510,175);Label(r,"Temperature",1340,790,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",1340,842,45);
