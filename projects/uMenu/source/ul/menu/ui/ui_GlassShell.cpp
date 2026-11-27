@@ -1122,7 +1122,8 @@ namespace ul::menu::ui {
                 const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
                 auto wide=e.Is<EntryType::Application>()&&!Conservative()?Banner(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
                 auto icon=e.Is<EntryType::Application>()?CustomIcon(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
-                if(!icon)icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
+                if(!icon)icon=entries->GlassIcon(idx,icon_budget);
+                if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
                 if(wide) {
                     RoundedArt(r,wide,85,155,1130,405,32);
                     HeroShade(105,175,1090,365);

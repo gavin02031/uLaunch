@@ -8,13 +8,6 @@ namespace ul::menu::ui {
 
     namespace {
 
-        constexpr size_t CaptureBufferWidth = pu::ui::render::BaseScreenWidth;
-        constexpr size_t CaptureBufferHeight = pu::ui::render::BaseScreenHeight;
-        constexpr size_t CaptureBufferBytesPerPixel = 4;
-
-        constexpr size_t CaptureBufferSize = CaptureBufferWidth * CaptureBufferHeight * CaptureBufferBytesPerPixel;
-        static_assert(CaptureBufferSize == 0x384000);
-
         RawRgbaImage::Ref g_ScreenCaptureBackground;
 
         constexpr u8 ScreenCaptureBackgroundAlphaIncrement = 14;
