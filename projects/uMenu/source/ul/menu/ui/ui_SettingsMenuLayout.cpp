@@ -888,10 +888,23 @@ namespace ul::menu::ui {
         this->setting_save_sfx = nullptr;
         this->back_sfx = nullptr;
 
-        auto brand=pu::ui::elm::TextBlock::New(70,48,"GlassNX  /  System");
+        auto brand=pu::ui::elm::TextBlock::New(70,48,"GlassNX  /  Advanced Settings");
         brand->SetFont(pu::ui::MakeDefaultFontName(30));
         brand->SetColor({238,244,255,225});this->Add(brand);
-        this->Add(GlassSystemPanel::New(48,165,1824,785));
+        this->Add(GlassSystemPanel::New(54,170,410,780));
+        this->Add(GlassSystemPanel::New(484,170,1380,780));
+        auto caption=pu::ui::elm::TextBlock::New(84,208,"Categories");
+        caption->SetFont(pu::ui::MakeDefaultFontName(37));
+        caption->SetColor({235,244,255,255});this->Add(caption);
+        const char *names[]={"System","GlassNX","Bluetooth","Network","Display","Developer"};
+        for(size_t i=0;i<category_labels.size();++i){
+            auto t=pu::ui::elm::TextBlock::New(86,300+int(i)*92,names[i]);
+            t->SetFont(pu::ui::MakeDefaultFontName(37));
+            t->SetColor({212,225,255,255});category_labels[i]=t;this->Add(t);
+        }
+        auto hint=pu::ui::elm::TextBlock::New(86,881,"L / R  Switch category");
+        hint->SetFont(pu::ui::MakeDefaultFontName(27));
+        hint->SetColor({225,235,255,220});this->Add(hint);
         this->menu_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         this->menu_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("settings_menu", "menu_text", this->menu_text);
@@ -1080,6 +1093,7 @@ namespace ul::menu::ui {
             this->submenu_text->SetVisible(false);
         }
         this->menu_text->SetText(GetMenuName(this->cur_menu));
+        for(size_t i=0;i<category_labels.size();++i)category_labels[i]->SetColor(i==static_cast<size_t>(this->cur_menu)?pu::ui::Color{255,255,255,255}:pu::ui::Color{182,200,231,210});
 
         if(this->cur_submenu == SettingSubmenu::None) {
             if(soft) {

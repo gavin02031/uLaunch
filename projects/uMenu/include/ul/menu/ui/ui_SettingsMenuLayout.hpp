@@ -3,6 +3,7 @@
 #include <ul/menu/ui/ui_IMenuLayout.hpp>
 #include <ul/menu/ui/ui_InputBar.hpp>
 #include <ul/cfg/cfg_Config.hpp>
+#include <array>
 
 namespace ul::menu::ui {
 
@@ -64,14 +65,15 @@ namespace ul::menu::ui {
 
     class SettingsMenuLayout : public IMenuLayout {
         public:
-            static constexpr u32 SettingsMenuWidth = 1770;
-            static constexpr u32 SettingsMenuItemSize = 150;
+            static constexpr u32 SettingsMenuWidth = 1260;
+            static constexpr u32 SettingsMenuItemSize = 138;
             static constexpr u32 SettingsMenuItemsToShow = 5;
 
             static constexpr u32 SettingsMenuTempXOffsetSteps = 14;
 
         private:
             pu::ui::elm::TextBlock::Ref menu_text;
+            std::array<pu::ui::elm::TextBlock::Ref,6> category_labels;
             pu::ui::elm::TextBlock::Ref submenu_text;
             pu::ui::elm::Menu::Ref settings_menu;
             pu::ui::elm::Menu::Ref settings_menu_temp;

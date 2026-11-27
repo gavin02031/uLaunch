@@ -53,7 +53,7 @@ namespace ul::menu::ui {
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
-        CloseGallery();
+        CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;
         liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;
         theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
@@ -459,13 +459,163 @@ namespace ul::menu::ui {
         SavePreferences();
     }
     void GlassShell::Search() {
+        if(safe_mode){NativeSearch(search);return;}
+        keyboard_draft=search;keyboard_shift=false;key_focus=10;
+        keyboard_open=true;hits.clear();touched=true;
+    }
+    void GlassShell::NativeSearch(const std::string &initial) {
         SwkbdConfig cfg;if(R_FAILED(swkbdCreate(&cfg,0)))return;
         swkbdConfigMakePresetDefault(&cfg);
         swkbdConfigSetType(&cfg,SwkbdType_All);
         swkbdConfigSetGuideText(&cfg,"Search your library");
-        swkbdConfigSetInitialText(&cfg,search.c_str());
+        swkbdConfigSetInitialText(&cfg,initial.c_str());
         char result[128]={};auto rc=ShowSwkbd(&cfg,result,sizeof(result));swkbdClose(&cfg);
         if(R_SUCCEEDED(rc)){search=result;focus=offset=0;}
+    }
+    namespace {
+        constexpr const char *KeyboardRows[]={"1234567890","qwertyuiop","asdfghjkl'","zxcvbnm,.-"};
+        constexpr const char *KeyboardActions[]={"Shift","Space","Delete","Clear","Search"};
+        void EraseCharacter(std::string &value){
+            if(value.empty())return;
+            size_t pos=value.size()-1;
+            while(pos>0&&(static_cast<unsigned char>(value[pos])&0xc0)==0x80)--pos;
+            value.erase(pos);
+        }
+    }
+    void GlassShell::FinishKeyboard(bool apply){
+        if(apply){search=keyboard_draft;focus=offset=0;}
+        keyboard_open=false;keyboard_draft.clear();hits.clear();touched=true;
+    }
+    void GlassShell::KeyboardKey(int key){
+        if(key<0||key>=45)return;
+        key_focus=key;
+        if(key<40){
+            char ch=KeyboardRows[key/10][key%10];
+            if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            if(keyboard_draft.size()<127)keyboard_draft+=ch;
+        }else switch(key){
+            case 40:keyboard_shift=!keyboard_shift;break;
+            case 41:if(keyboard_draft.size()<127)keyboard_draft+=' ';break;
+            case 42:EraseCharacter(keyboard_draft);break;
+            case 43:keyboard_draft.clear();break;
+            case 44:FinishKeyboard(true);break;
+        }
+    }
+    void GlassShell::KeyboardInput(u64 down,pu::ui::TouchPoint touch){
+        if(down&HidNpadButton_B){FinishKeyboard(false);return;}
+        if(down&HidNpadButton_Plus){FinishKeyboard(true);return;}
+        if(down&HidNpadButton_X){const auto initial=keyboard_draft;FinishKeyboard(false);NativeSearch(initial);return;}
+        if(down&HidNpadButton_Y){EraseCharacter(keyboard_draft);return;}
+        if(down&HidNpadButton_L){keyboard_shift=!keyboard_shift;return;}
+        if(touch.IsEmpty())touched=false;
+        else if(!touched){
+            touched=true;
+            for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)){
+                auto cb=hit.action;cb();return;
+            }
+        }
+        int row=key_focus/10,col=key_focus%10;
+        if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft))col=std::max(0,col-1);
+        else if(down&(HidNpadButton_Right|HidNpadButton_StickLRight))col=std::min(row==4?4:9,col+1);
+        else if(down&(HidNpadButton_Up|HidNpadButton_StickLUp)){
+            if(row>0){if(row==4)col*=2;--row;}
+        }else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){
+            if(row<4){++row;if(row==4)col/=2;}
+        }else if(down&HidNpadButton_A){KeyboardKey(key_focus);return;}
+        key_focus=row*10+col;
+    }
+    void GlassShell::RenderKeyboard(Renderer &r){
+        hits.clear();
+        r->RenderRectangleFill({9,16,38,110},0,0,1920,1080);
+        Card(r,115,155,1690,845);
+        // Legible under all four wallpapers, independent of experimental GPU targets.
+        ul::glassnx::DrawSurface(r,135,175,1650,805,48,{19,30,56,178});
+        Glyph(r,"search",178,209,42);Label(r,"Search your library",238,201,45,1200);
+        Label(r,"B  Cancel",1490,218,30,260);
+        hits.push_back({1450,188,300,84,[this](){FinishKeyboard(false);}});
+        ul::glassnx::DrawSurface(r,175,278,1570,105,32,{13,23,48,200});
+        Label(r,keyboard_draft.empty()?"Type a game or app name":keyboard_draft+" |",205,309,37,1500);
+        for(int i=0;i<45;i++){
+            const bool action=i>=40;
+            const int x=action?175+(i-40)*316:175+(i%10)*158;
+            const int y=410+(i/10)*91,w=action?300:142;
+            const bool selected=i==key_focus;
+            const bool active=i==40&&keyboard_shift;
+            const auto color=selected?pu::ui::Color{144,176,236,235}:active?pu::ui::Color{104,145,211,210}:i==44?pu::ui::Color{68,137,194,215}:pu::ui::Color{112,133,179,130};
+            r->RenderRoundedRectangleFill(color,x,y,w,78,20);
+            r->RenderRoundedRectangle({230,239,255,static_cast<u8>(selected?230:90)},x,y,w,78,20);
+            std::string key;
+            if(action)key=KeyboardActions[i-40];
+            else {char ch=KeyboardRows[i/10][i%10];if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));key=std::string(1,ch);}
+            Label(r,key,x+w/2,y+19,37,w-14,true);
+            hits.push_back({x,y,w,78,[this,i](){KeyboardKey(i);}});
+        }
+        Label(r,"A  Type     Y  Delete     L  Shift     +  Search     X  System keyboard",960,900,27,1510,true);
+    }
+    void GlassShell::OpenCloseSheet(){
+        if(!g_GlobalSettings.IsSuspended())return;
+        close_sheet=true;close_focus=0;hits.clear();touched=true;
+    }
+    void GlassShell::FinishCloseSheet(bool confirm){
+        close_sheet=false;hits.clear();touched=true;
+        if(confirm&&g_GlobalSettings.IsSuspended())close_suspended();
+    }
+    void GlassShell::CloseSheetInput(u64 down,pu::ui::TouchPoint touch){
+        if(!g_GlobalSettings.IsSuspended()||(down&HidNpadButton_B)){FinishCloseSheet(false);return;}
+        if(down&(HidNpadButton_Left|HidNpadButton_Right|HidNpadButton_StickLLeft|HidNpadButton_StickLRight))close_focus=1-close_focus;
+        else if(down&HidNpadButton_A){FinishCloseSheet(close_focus==1);return;}
+        if(touch.IsEmpty())touched=false;
+        else if(!touched){
+            touched=true;
+            for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)){
+                auto cb=hit.action;cb();return;
+            }
+        }
+    }
+    void GlassShell::RenderCloseSheet(Renderer &r){
+        hits.clear();
+        r->RenderRectangleFill({7,12,30,128},0,0,1920,1080);
+        // A suspended game uses conservative rendering: no GPU targets or capture.
+        ul::glassnx::DrawSurface(r,460,250,1000,565,60,{35,47,81,207});
+        r->RenderCircleFill({202,106,135,220},960,355,58);
+        Glyph(r,"power",930,325,60);
+        Label(r,"Close game?",960,440,64,850,true);
+        Label(r,"Any unsaved progress will be lost.",960,535,37,900,true);
+        Button(r,520,650,420,95,"Keep playing",close_focus==0,[this](){FinishCloseSheet(false);});
+        ul::glassnx::DrawSurface(r,980,650,420,95,40,{166,66,100,static_cast<u8>(close_focus==1?240:180)},close_focus==1);
+        Label(r,"Close game",1190,677,37,390,true);
+        hits.push_back({980,650,420,95,[this](){FinishCloseSheet(true);}});
+        Label(r,"B  Cancel     A  Confirm selection",960,770,27,850,true);
+    }
+    void GlassShell::ActivateDock(int index){
+        dock_focus=-1;
+        switch(index){
+            case 0:SetPage(Page::Notifications);break;
+            case 1:SetPage(Page::Control);break;
+            case 2:ShowAlbum();break;
+            case 3:SetPage(Page::Settings);break;
+            case 4:ShowPowerDialog();break;
+        }
+    }
+    void GlassShell::RenderDock(Renderer &r){
+        // Shared lens with icon-first shortcuts, a restrained raised selection,
+        // and a detached silhouette. No additional full-screen render target.
+        Card(r,370,920,1180,132);
+        ul::glassnx::DrawSurface(r,370,920,1180,132,58,{36,49,89,78});
+        constexpr const char *icons[]={"bell","sun","album","settings","power"};
+        constexpr const char *names[]={"Alerts","Control","Album","Settings","Power"};
+        for(int i=0;i<5;i++){
+            const int x=390+i*230;
+            if(dock_focus==i)ul::glassnx::DrawSurface(r,x,931,220,110,42,{146,170,230,130},true);
+            Glyph(r,icons[i],x+88,941,44);
+            Label(r,names[i],x+110,994,27,208,true);
+            hits.push_back({x,928,220,116,[this,i](){ActivateDock(i);}});
+        }
+        const auto alerts=g_MenuApplication->GetNotificationHistory().size();
+        if(alerts){
+            r->RenderCircleFill({147,101,162,255},535,946,18);
+            Label(r,alerts>9?"9+":std::to_string(alerts),535,931,27,0,true);
+        }
     }
     void GlassShell::LoadBackdrop() {
         backdrop.clear();
@@ -564,6 +714,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::SetPage(Page p) {
         if(p==page) return;
+        dock_focus=-1;
         if((p==Page::Control || p==Page::Notifications) && static_cast<int>(page)<4) {
             previous=page;previous_focus=focus;previous_offset=offset;previous_filter=filter;previous_section=setting_section;previous_search=search;
         }
@@ -909,6 +1060,7 @@ namespace ul::menu::ui {
             Label(r,"★",x+w-30,y+11,27,0,true);
         }
         hits.push_back({x,y,w,h,[this,index](){
+            dock_focus=-1;
             const auto list=List();const auto it=std::find(list.begin(),list.end(),index);
             if(it==list.end())return;
             const int next=static_cast<int>(it-list.begin());
@@ -991,11 +1143,17 @@ namespace ul::menu::ui {
         r->RenderRoundedRectangleFill({15,24,52,170},left,top,width,height,width/2);
         r->RenderRoundedRectangle({217,232,255,80},left,top,width,height,width/2);
         if(value>=0) {
-            const int amount=int(height*value);
+            const int amount=int(height*std::clamp(value,0.f,1.f));
             if(amount>0){
-                const int rr=std::min((width-6)/2,amount/2);
-                r->RenderRoundedRectangleFill(name=="Brightness"?pu::ui::Color{250,236,196,238}:pu::ui::Color{212,229,255,238},left+3,top+height-amount,width-6,amount,rr);
-                if(amount>18)r->RenderRoundedRectangle({255,255,255,170},left+5,top+height-amount+2,width-10,amount-4,std::max(1,rr-2));
+                const int fw=width-6,fx=left+3,fy=top+height-amount;
+                const auto fill=name=="Brightness"?pu::ui::Color{250,236,196,255}:pu::ui::Color{212,229,255,255};
+                const int radius=std::min(fw/2-2,amount/2-1);
+                // SDL_gfx can omit the stem at an exact half-width radius.
+                if(radius>1){
+                    r->RenderRoundedRectangleFill(fill,fx,fy,fw,amount,radius);
+                    if(amount>2*radius)r->RenderRectangleFill(fill,fx,fy+radius,fw,amount-2*radius);
+                }else r->RenderRectangleFill(fill,fx,fy,fw,amount);
+                if(amount>24)r->RenderRoundedRectangle({255,255,255,120},fx+2,fy+2,fw-4,amount-4,std::max(1,radius-2));
             }
         }
         Glyph(r,name=="Brightness"?"sun":"volume",x+w/2-22,y+h-44,44);
@@ -1052,7 +1210,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.18",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.19",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1109,6 +1267,8 @@ namespace ul::menu::ui {
     }
     void GlassShell::HandleInput(u64 down,pu::ui::TouchPoint touch) {
         if(gallery.active){GalleryInput(down,touch);return;}
+        if(close_sheet){CloseSheetInput(down,touch);return;}
+        if(keyboard_open){KeyboardInput(down,touch);return;}
         if(touch.IsEmpty()) {
             touched=false;drag_slider=-1;
         } else if(touched && drag_slider>=0 && page==Page::Control) {
@@ -1134,7 +1294,7 @@ namespace ul::menu::ui {
         if(down&HidNpadButton_Minus){legacy();return;}
         if(down&(HidNpadButton_ZL|HidNpadButton_ZR)){if(page==Page::Control)Back();else SetPage(Page::Control);return;}
         if(down&HidNpadButton_Plus){if(page==Page::Notifications)Back();else SetPage(Page::Notifications);return;}
-        if(down&HidNpadButton_B){Back();return;}
+        if(down&HidNpadButton_B){if(dock_focus>=0){dock_focus=-1;return;}Back();return;}
         if(page==Page::Notifications) {
             if(down&(HidNpadButton_Up|HidNpadButton_StickLUp)){ScrollAlerts(-1);return;}
             if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){ScrollAlerts(1);return;}
@@ -1147,8 +1307,16 @@ namespace ul::menu::ui {
         }
         if((page==Page::Home||page==Page::Library||page==Page::Apps) && (down&HidNpadButton_StickR)){TitleOptions();return;}
         if(down&HidNpadButton_X) {
-            if(page==Page::Home && g_GlobalSettings.IsSuspended()){close_suspended();return;}
+            if(page==Page::Home && g_GlobalSettings.IsSuspended()){OpenCloseSheet();return;}
             if(page==Page::Library||page==Page::Apps){Search();return;}
+        }
+        if(page==Page::Home){
+            if(dock_focus>=0){
+                if(down&(HidNpadButton_Up|HidNpadButton_StickLUp)){dock_focus=-1;return;}
+                if(down&(HidNpadButton_Left|HidNpadButton_StickLLeft)){dock_focus=std::max(0,dock_focus-1);return;}
+                if(down&(HidNpadButton_Right|HidNpadButton_StickLRight)){dock_focus=std::min(4,dock_focus+1);return;}
+                if(down&HidNpadButton_A){ActivateDock(dock_focus);return;}
+            }else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){dock_focus=0;return;}
         }
         if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){ToggleFavorite();return;}
         if(page==Page::Settings && (down&HidNpadButton_X)){SetTheme((theme+1)%4);return;}
@@ -1208,7 +1376,7 @@ namespace ul::menu::ui {
         if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.18 · SAFE":"v0.18",130,76,27);
+        Label(r,safe_mode?"v0.19 · SAFE":"v0.19",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -1288,7 +1456,7 @@ namespace ul::menu::ui {
                     r->RenderRoundedRectangleFill({126,56,89,160},790,455,300,68,34);
                     r->RenderRoundedRectangle({255,198,211,130},790,455,300,68,34);
                     Label(r,"X  Close Game",940,471,27,270,true);
-                    hits.push_back({790,455,300,68,close_suspended});
+                    hits.push_back({790,455,300,68,[this](){OpenCloseSheet();}});
                 }
             } else {
                 Label(r,"Your home awaits",112,245,64);
@@ -1296,23 +1464,13 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
-            Label(r,"R Stick  Options",385,606,27,330);
+            Label(r,"R Stick  Options   ·   ↓ Dock",385,606,27,670);
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
-            for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);
+            for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,250,dock_focus<0&&focus==offset+i);
             const int dots=std::min(9,int((list.size()+4)/5));
-            for(int i=0;i<dots;++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960-(dots-1)*9+i*18,938,4);
-            Card(r,392,954,1136,87);
-            Segment(r,404,960,215,74,"bell","Alerts",false,[this](){SetPage(Page::Notifications);});
-            const auto alert_count=g_MenuApplication->GetNotificationHistory().size();
-            if(alert_count>0){
-                r->RenderCircleFill({125,146,218,255},602,964,18);
-                Label(r,std::to_string(alert_count),602,945,27,0,true);
-            }
-            Segment(r,628,960,210,74,"sun","Control",false,[this](){SetPage(Page::Control);});
-            Segment(r,847,960,210,74,"album","Album",false,[](){ShowAlbum();});
-            Segment(r,1066,960,210,74,"settings","Settings",false,[this](){SetPage(Page::Settings);});
-            Segment(r,1285,960,228,74,"power","Power",false,[](){ShowPowerDialog();});
+            for(int i=0;i<dots;++i)r->RenderCircleFill({227,235,255,static_cast<u8>(i==offset/5?230:80)},960-(dots-1)*9+i*18,909,4);
+            RenderDock(r);
         } else if(page==Page::Library || page==Page::Apps) {
             const bool games=page==Page::Library;
             const int capacity=games?10:12;
@@ -1441,6 +1599,8 @@ namespace ul::menu::ui {
             }
             Label(r,"A  Select     B  Home     ZL/ZR  Control     +  Notifications",70,1005,30);
         }
+        if(close_sheet){RenderCloseSheet(r);return;}
+        if(keyboard_open){RenderKeyboard(r);return;}
         if(motion&&!Conservative()) {
             const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-transition).count();
             if(elapsed>=0 && elapsed<260) {

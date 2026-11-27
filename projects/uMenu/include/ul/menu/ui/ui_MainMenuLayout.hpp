@@ -132,6 +132,7 @@ namespace ul::menu::ui {
         public:
             MainMenuLayout();
             PU_SMART_CTOR(MainMenuLayout)
+            pu::sdl2::TextureHandle::Ref AppearanceWallpaper(){return glass_shell?glass_shell->AppearanceWallpaper():GetBackgroundTexture();}
 
             void OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) override;
             void OnMenuUpdate() override;

@@ -98,6 +98,20 @@ namespace ul::menu::ui {
         void SavePreferences();
         void SetTheme(int index);
         void Search();
+        void NativeSearch(const std::string &initial);
+        bool keyboard_open=false,keyboard_shift=false,close_sheet=false;
+        int key_focus=0,close_focus=0,dock_focus=-1;
+        std::string keyboard_draft;
+        void RenderKeyboard(Renderer &r);
+        void KeyboardInput(u64 down,pu::ui::TouchPoint touch);
+        void KeyboardKey(int key);
+        void FinishKeyboard(bool apply);
+        void OpenCloseSheet();
+        void FinishCloseSheet(bool confirm);
+        void RenderCloseSheet(Renderer &r);
+        void CloseSheetInput(u64 down,pu::ui::TouchPoint touch);
+        void RenderDock(Renderer &r);
+        void ActivateDock(int index);
         void ToggleFavorite();
         bool Favorite(u64 id) const;
         void LoadBackdrop();
@@ -147,9 +161,10 @@ namespace ul::menu::ui {
         s32 GetY() override {return 0;}
         s32 GetWidth() override {return 1920;}
         s32 GetHeight() override {return 1080;}
+        pu::sdl2::TextureHandle::Ref AppearanceWallpaper(){return ActiveWallpaper();}
         void RecordLaunch(u64 id);
         void PrepareTransition();
-        void Invalidate() {CloseGallery();focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;}
+        void Invalidate() {CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}
