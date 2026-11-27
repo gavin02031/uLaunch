@@ -1,5 +1,6 @@
 #include <ul/menu/ui/ui_GlassShell.hpp>
 #include <ul/menu/ui/ui_ArtworkClient.hpp>
+#include <ul/glassnx/Artwork.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/menu/ui/ui_Common.hpp>
 #include <algorithm>
@@ -166,7 +167,7 @@ namespace ul::menu::ui {
         if(action==3){if(SetArtworkKey())g_MenuApplication->ShowNotification("SteamGridDB key saved");return;}
         if(action==2){
             if(g_MenuApplication->DisplayDialog("Restore default artwork?","Remove custom cover and banner for this title.",{"Restore","Cancel"},true)==0){
-                remove((root+".cover").c_str());remove((root+".hero").c_str());remove((root+".jpg").c_str());
+                remove((root+".cover1024").c_str());remove((root+".cover").c_str());remove((root+".hero").c_str());remove((root+".jpg").c_str());
                 custom_icons.erase(id);banner.reset();banner_checked=false;
             }
             return;
@@ -182,17 +183,14 @@ namespace ul::menu::ui {
         if(!art::FindArtworkGames(name,games,error)){
             g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);return;
         }
-        // Keep dialog option count bounded on the handheld display.
+        // One readable match per card avoids long game titles as tiny buttons.
         size_t game_page=0;int game=-1;
         while(game<0){
-            const size_t begin=game_page*3,end=std::min(begin+3,games.size());
-            std::vector<std::string> labels;
-            for(size_t i=begin;i<end;i++)labels.push_back(games[i].name);
-            labels.push_back("Next");labels.push_back("Cancel");
-            const int chosen=g_MenuApplication->DisplayDialog("Choose matching game","Confirm the SteamGridDB title.",labels,true);
-            if(chosen<0||chosen==int(labels.size())-1)return;
-            if(chosen==int(end-begin)){game_page=(game_page+1)%((games.size()+2)/3);continue;}
-            if(chosen<int(end-begin))game=int(begin)+chosen;else return;
+            const auto detail=name+"\n\n"+games[game_page].name+"\nMatch "+std::to_string(game_page+1)+" of "+std::to_string(games.size());
+            const int chosen=g_MenuApplication->DisplayDialog("Find your game",detail,{"Use this game","Next match","Cancel"},true);
+            if(chosen==0)game=int(game_page);
+            else if(chosen==1)game_page=(game_page+1)%games.size();
+            else return;
         }
         std::vector<art::ArtworkHero> pictures;
         if(!art::FindPictures(games[game].id,hero,pictures,error)){
@@ -208,21 +206,38 @@ namespace ul::menu::ui {
             // Decode only the bounded response, and render a small preview.
             auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
             auto image=rw?IMG_Load_RW(rw,1):nullptr;
-            if(!image){++i;continue;}
+            auto normalized=ul::glassnx::NormalizeArtwork(image,hero,1024,error);
+            if(image)SDL_FreeSurface(image);
+            if(!normalized){
+                if(g_MenuApplication->DisplayDialog("Choose sharper artwork",error,{"Next artwork","Cancel"},true)!=0)return;
+                ++i;continue;
+            }
+            image=normalized;
             const float scale=std::min(360.f/image->w,220.f/image->h);
             auto small=SDL_CreateRGBSurfaceWithFormat(0,std::max(1,int(image->w*scale)),std::max(1,int(image->h*scale)),32,SDL_PIXELFORMAT_RGBA32);
             SDL_Texture *tex=nullptr;
             if(small&&SDL_BlitScaled(image,nullptr,small,nullptr)==0)tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),small);
             if(small)SDL_FreeSurface(small);
-            SDL_FreeSurface(image);
-            if(!tex){++i;continue;}
+            if(!tex){SDL_FreeSurface(image);++i;continue;}
             auto preview=pu::sdl2::TextureHandle::New(tex);
-            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size()),{"Apply","Next","Cancel"},true,preview);
-            if(pick==1){++i;continue;}
-            if(pick!=0)return;
-            if(art::SavePicture(root+(hero?".hero":".cover"),data,error)){
+            const int pick=g_MenuApplication->DisplayDialog(hero?"Hero banner":"Game cover","Artwork "+std::to_string(i+1)+" of "+std::to_string(pictures.size())+" • "+(hero?"Hero":"Cover")+"\nSource: "+std::to_string(pictures[i].width)+" x "+std::to_string(pictures[i].height)+"\n"+(hero?"Center crop • 226:81 • 1130 x 405":"Square crop • 512 x 512 + 1024 x 1024"),{"Apply artwork","Next artwork","Cancel"},true,preview);
+            if(pick==1){SDL_FreeSurface(image);++i;continue;}
+            if(pick!=0){SDL_FreeSurface(image);return;}
+            bool saved=false;
+            if(!Conservative()) {
+                if(hero)saved=ul::glassnx::ExportArtwork(image,root+".hero",error);
+                else {
+                    auto tile=ul::glassnx::NormalizeArtwork(image,false,512,error);
+                    if(tile){
+                        saved=ul::glassnx::ExportArtwork(image,root+".cover1024",error) && ul::glassnx::ExportArtwork(tile,root+".cover",error);
+                        SDL_FreeSurface(tile);
+                    }
+                }
+            } else error="Close the running game before applying artwork.";
+            SDL_FreeSurface(image);
+            if(saved){
                 custom_icons.erase(id);banner.reset();banner_checked=false;
-                g_MenuApplication->ShowNotification("Custom artwork applied");
+                g_MenuApplication->ShowNotification(hero?"Hero applied • 1130 x 405":"Cover applied • 512 + 1024 square");
             } else g_MenuApplication->DisplayDialog("SteamGridDB",error,{"OK"},true);
             return;
         }
@@ -407,12 +422,12 @@ namespace ul::menu::ui {
         if(length<=0||length>3*1024*1024)return {};
         auto image=IMG_Load(name);if(!image)return {};
         if(image->w>0&&image->h>0&&image->w<=1920&&image->h<=1080){
-            auto scaled=SDL_CreateRGBSurfaceWithFormat(0,960,540,32,SDL_PIXELFORMAT_RGBA32);
+            auto scaled=SDL_CreateRGBSurfaceWithFormat(0,1130,405,32,SDL_PIXELFORMAT_RGBA32);
             if(scaled){
-                // Center-crop to the cached 16:9 texture, preserving aspect ratio.
+                // Center-crop to the cached 226:81 texture, preserving aspect ratio.
                 SDL_Rect crop{0,0,image->w,image->h};
-                if(image->w*9>image->h*16){crop.w=image->h*16/9;crop.x=(image->w-crop.w)/2;}
-                else {crop.h=image->w*9/16;crop.y=(image->h-crop.h)/2;}
+                if(image->w*81>image->h*226){crop.w=image->h*226/81;crop.x=(image->w-crop.w)/2;}
+                else {crop.h=image->w*81/226;crop.y=(image->h-crop.h)/2;}
                 if(crop.w>0&&crop.h>0&&SDL_BlitScaled(image,&crop,scaled,nullptr)==0){
                     auto tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),scaled);
                     if(tex)banner=pu::sdl2::TextureHandle::New(tex);
@@ -1126,7 +1141,7 @@ namespace ul::menu::ui {
                 if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
                 if(wide) {
                     RoundedArt(r,wide,85,155,1130,405,32);
-                    HeroShade(105,175,1090,365);
+
                 } else if(icon) {
                     // Installed icon as artwork-derived backdrop, not invented wide banner.
                     auto tex=icon->Get();
@@ -1136,25 +1151,26 @@ namespace ul::menu::ui {
                         SDL_SetTextureColorMod(tex,102,108,146);
                         Cover(r,icon,105,175,1090,365);
                         SDL_SetTextureColorMod(tex,rr,gg,bb);
-                        HeroShade(105,175,1090,365);
+
                     }
                     RoundedArt(r,icon,805,165,390,390,58);
                 }
+                Card(r,98,295,660,248);
+                r->RenderRoundedRectangleFill({38,47,78,72},98,295,660,248,30);
+                r->RenderRoundedRectangle({255,255,255,100},98,295,660,248,30);
                 if(suspended){
-                    r->RenderRoundedRectangleFill({94,156,139,205},112,174,18,18,9);
-                    Label(r,"CONTINUE PLAYING",142,168,30,620);
-                }else Label(r,"FEATURED GAME",112,185,30);
-                Label(r,EntryName(e),112,260,64,650);
-                Label(r,suspended?"Currently suspended":"Ready to play",112,362,30,680);
+                    r->RenderRoundedRectangleFill({94,156,139,205},122,320,14,14,9);
+                    Label(r,"CONTINUE PLAYING",150,310,27,570);
+                }else Label(r,"FEATURED GAME",122,310,27);
+                Label(r,EntryName(e),122,350,45,610);
+                Label(r,suspended?"Suspended":(e.Is<EntryType::Application>() && std::find(recent.begin(),recent.end(),e.app_info.app_id)!=recent.end()?"Recently played":"Ready to play"),122,410,27,610);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
+                Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
                 if(suspended) {
-                    r->RenderRoundedRectangleFill({126,56,89,160},380,445,300,78,39);
-                    r->RenderRoundedRectangle({255,198,211,130},380,445,300,78,39);
-                    Label(r,"X  Close Game",530,465,30,270,true);
-                    hits.push_back({380,445,300,78,close_suspended});
-                }
-                else {
-                    Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
+                    r->RenderRoundedRectangleFill({126,56,89,160},790,455,300,68,34);
+                    r->RenderRoundedRectangle({255,198,211,130},790,455,300,68,34);
+                    Label(r,"X  Close Game",940,471,27,270,true);
+                    hits.push_back({790,455,300,68,close_suspended});
                 }
             } else {
                 Label(r,"Your home awaits",112,245,64);

@@ -94,8 +94,10 @@ def main():
     with Image.open(io.BytesIO(raw)) as im:
         if im.width*im.height>20_000_000: raise ValueError("Artwork too large")
         art=ImageOps.exif_transpose(im).convert("RGB")
-        art.thumbnail((1280,720),Image.Resampling.LANCZOS)
-        dest=root/"art"/(tid+".jpg")
+        if art.width < 1130 or art.height < 405:
+            raise ValueError("Hero must retain at least 1130 x 405 pixels after center cropping")
+        art=ImageOps.fit(art,(1130,405),method=Image.Resampling.LANCZOS,centering=(.5,.5))
+        dest=root/"art"/(tid+".hero")
         dest.parent.mkdir(parents=True,exist_ok=True)
         if dest.exists() and input(f"Replace {dest.name}? [y/N] ").strip().lower()!="y": return
         temp=dest.with_suffix(".jpg.tmp")

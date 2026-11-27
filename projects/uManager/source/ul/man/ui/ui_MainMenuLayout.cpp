@@ -244,7 +244,7 @@ namespace ul::man::ui {
         opts.clear();
         for(size_t i=0;i<heroes.size();i++)opts.push_back("Hero "+std::to_string(i+1)+" ("+std::to_string(heroes[i].width)+"x"+std::to_string(heroes[i].height)+")");
         opts.push_back("Cancel");
-        const int hero=g_MainApplication->CreateShowDialog("Choose artwork","JPG banners are listed in API order; previews are not available yet.",opts,true);
+        const int hero=g_MainApplication->CreateShowDialog("Choose artwork","Hero artwork • Center crop to 226:81\nGlassNX exports 1130 x 405. Choose a sharp source.",opts,true);
         if(hero<0||hero>=int(heroes.size()))return;
         if(g_MainApplication->CreateShowDialog("Import banner","Replace the existing custom hero for "+chosen.name+"?",{"Import","Cancel"},true)!=0)return;
         const bool ok=InstallArtwork(chosen,heroes[hero],err);

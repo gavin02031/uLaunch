@@ -1,4 +1,5 @@
 #include <ul/man/man_Artwork.hpp>
+#include <ul/glassnx/Artwork.hpp>
 #include <switch.h>
 #include <curl/curl.h>
 #include <json.hpp>
@@ -140,11 +141,12 @@ namespace ul::man {
         std::string data;if(!Fetch(hero.url,false,3*1024*1024,data,error))return false;
         int w=0,h=0;if(!JpegSize(data,w,h)||w>1920||h>1080){error="Unsupported JPEG dimensions.";return false;}
         mkdir("sdmc:/glassnx/art",0777);
-        const auto path="sdmc:/glassnx/art/"+title.id+".jpg",temp=path+".tmp";
-        auto fp=fopen(temp.c_str(),"wb");if(!fp){error="Unable to save artwork.";return false;}
-        const bool wrote=fwrite(data.data(),1,data.size(),fp)==data.size();
-        const bool closed=fclose(fp)==0;
-        if(!wrote||!closed||rename(temp.c_str(),path.c_str())!=0){remove(temp.c_str());error="Artwork could not be saved; old file retained.";return false;}
-        return true;
+        auto rw=SDL_RWFromConstMem(data.data(),int(data.size()));
+        auto source=rw?IMG_Load_RW(rw,1):nullptr;
+        auto normalized=ul::glassnx::NormalizeArtwork(source,true,0,error);
+        if(source)SDL_FreeSurface(source);
+        if(!normalized)return false;
+        const bool saved=ul::glassnx::ExportArtwork(normalized,"sdmc:/glassnx/art/"+title.id+".hero",error);
+        SDL_FreeSurface(normalized);return saved;
     }
 }

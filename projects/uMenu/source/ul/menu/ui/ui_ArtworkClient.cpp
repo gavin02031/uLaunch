@@ -113,22 +113,22 @@ namespace ul::menu::art {
             if(v.contains("nsfw")&&v["nsfw"]!=false)continue;
             if(v.contains("humor")&&v["humor"]!=false)continue;
             const auto url=v["url"].get<std::string>();const int w=v["width"].get<int>(),h=v["height"].get<int>();
-            if(w<=0||h<=0||w>(hero?1920:1024)||h>(hero?1080:1024))continue;
+            if(w<=0||h<=0||w>1920||h>1920)continue;
             if(url.size()<4||url.size()>512)continue;
             if(url.substr(url.size()-4)!=".jpg"&&url.substr(url.size()-4)!=".png"&&(url.size()<5||url.substr(url.size()-5)!=".jpeg"))continue;
             out.push_back({url,w,h});
         }
         if(out.empty()){error="No compatible static JPG or PNG artwork found.";return false;}return true;
     }
-    bool DownloadPicture(const ArtworkHero &item,bool hero,std::string &data,std::string &error){
+    bool DownloadPicture(const ArtworkHero &item,bool,std::string &data,std::string &error){
         if(!Fetch(item.url,false,3*1024*1024,data,error))return false;
         int w=0,h=0;
         if(data.size()>=24&&memcmp(data.data(),"\x89PNG\r\n\x1a\n",8)==0&&memcmp(data.data()+12,"IHDR",4)==0){
             auto be=[&](size_t i){return (uint32_t(uint8_t(data[i]))<<24)|(uint32_t(uint8_t(data[i+1]))<<16)|(uint32_t(uint8_t(data[i+2]))<<8)|uint32_t(uint8_t(data[i+3]));};
             const auto pw=be(16),ph=be(20);
-            if(pw<=1920&&ph<=1080){w=int(pw);h=int(ph);}
+            if(pw<=1920&&ph<=1920){w=int(pw);h=int(ph);}
         } else JpegSize(data,w,h);
-        if(w<=0||h<=0||w>(hero?1920:1024)||h>(hero?1080:1024)){error="Unsupported image dimensions.";data.clear();return false;}
+        if(w<=0||h<=0||w>1920||h>1920){error="Unsupported image dimensions.";data.clear();return false;}
         return true;
     }
     bool SavePicture(const std::string &path,const std::string &data,std::string &error){
