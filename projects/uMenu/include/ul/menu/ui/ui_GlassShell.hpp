@@ -63,7 +63,7 @@ namespace ul::menu::ui {
         pu::ui::Color WallpaperTint() const;
         void FrameDiagnostics();
         bool diagnostics=false;
-        std::chrono::steady_clock::time_point frame_tick{},frame_window{};
+        std::chrono::steady_clock::time_point frame_tick{},frame_window{},last_diag_log{};
         unsigned frame_count=0;
         float frame_ms=0,frame_max=0,display_fps=0,display_max=0;
         std::chrono::steady_clock::time_point transition{};

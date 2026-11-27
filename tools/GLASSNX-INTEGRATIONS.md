@@ -18,3 +18,5 @@ Export titles from Settings > Homebrew, then open GlassNX Manager > SteamGridDB 
 
 ## From a game's options
 In GlassNX highlight a title and press the right stick, then Change artwork. Enter your API key once in the on-device keyboard, choose Cover or Hero, confirm the matching title and preview/apply an image. Requires /glassnx/cacert.pem as above. Close games first; Safe Mode disables imports. Artwork changes affect GlassNX only.
+
+In v0.15 full manual packages include the trusted CA bundle. Enter the API key from a game's options; no separate CA download should be required if the complete release is installed.
