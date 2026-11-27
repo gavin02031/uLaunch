@@ -6,7 +6,7 @@ namespace ul::menu::ui {
 
     class StartupMenuLayout : public IMenuLayout {
         public:
-            static constexpr u32 UsersMenuWidth = 1320;
+            static constexpr u32 UsersMenuWidth = 940;
             static constexpr u32 UsersMenuItemSize = 150;
             static constexpr u32 UsersMenuItemsToShow = 5;
 

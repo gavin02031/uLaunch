@@ -36,7 +36,12 @@ namespace ul::menu::ui {
         this->user_create_sfx = nullptr;
         this->user_select_sfx = nullptr;
 
-        this->info_text = pu::ui::elm::TextBlock::New(0, 0, GetLanguageString("startup_welcome_info"));
+        auto title=pu::ui::elm::TextBlock::New(0,92,"GlassNX");
+        title->SetFont(pu::ui::MakeDefaultFontName(64));
+        title->SetColor({255,255,255,255});
+        title->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
+        this->Add(title);
+        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "Choose your profile");
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("startup_menu", "info_text", this->info_text);
         this->Add(this->info_text);

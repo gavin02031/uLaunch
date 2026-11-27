@@ -3,13 +3,13 @@
     "text_color": "#ffffffff",
     "toast_base_color": "#484d7aee",
     "toast_text_color": "#ffffffff",
-    "menu_focus_color": "#b3a8f2ff",
-    "menu_bg_color": "#474d82e8",
+    "menu_focus_color": "#627bb8d9",
+    "menu_bg_color": "#28395eaf",
     "dialog_title_color": "#ffffffff",
     "dialog_cnt_color": "#ffffffff",
     "dialog_opt_color": "#ffffffff",
-    "dialog_color": "#414b79f5",
-    "dialog_over_color": "#8277b9ff",
+    "dialog_color": "#263656ee",
+    "dialog_over_color": "#657fbbdd",
     "main_menu": {
         "top_menu_bg": {
             "x": 61,
@@ -89,12 +89,12 @@
     },
     "startup_menu": {
         "info_text": {
-            "y": 75,
+            "y": 190,
             "h_align": "center",
             "font_size": "medium"
         },
         "users_menu": {
-            "y": 180,
+            "y": 350,
             "h_align": "center"
         }
     },

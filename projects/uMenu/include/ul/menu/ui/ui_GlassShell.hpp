@@ -66,6 +66,11 @@ namespace ul::menu::ui {
         void Cover(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h);
         bool touched = false;
         bool icon_budget = true;
+        bool safe_mode = false;
+        size_t material_bytes = 0;
+        void ClearMaterials();
+        bool Conservative() const;
+        void ToggleSafeMode();
         float brightness = -1, volume = -1;
         int temperature = -1;
         s64 free_bytes = -1, total_bytes = -1;
@@ -98,6 +103,7 @@ namespace ul::menu::ui {
         s32 GetWidth() override {return 1920;}
         s32 GetHeight() override {return 1080;}
         void RecordLaunch(u64 id);
+        void PrepareTransition();
         void Invalidate() {focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();banner.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;

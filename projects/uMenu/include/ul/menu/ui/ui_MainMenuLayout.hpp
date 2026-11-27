@@ -180,6 +180,7 @@ namespace ul::menu::ui {
 
             inline void StartResume() {
                 pu::audio::PlaySfx(this->resume_app_sfx);
+                if(this->glass_shell)this->glass_shell->PrepareTransition();
                 RequestResumeScreenCaptureBackground();
             }
 

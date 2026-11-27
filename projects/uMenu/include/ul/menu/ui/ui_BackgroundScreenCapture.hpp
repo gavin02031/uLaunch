@@ -16,6 +16,7 @@ namespace ul::menu::ui {
     void RequestShowGainFocusScreenCaptureBackground();
     bool IsScreenCaptureBackgroundNotTransitioning();
     bool IsScreenCaptureBackgroundFocused();
+    bool IsScreenCaptureResumePending();
 
     void UpdateScreenCaptureBackground(const bool after_start_stay_at_min_alpha);
 

@@ -773,7 +773,7 @@ namespace ul::menu::ui {
         this->glass_shell = GlassShell::New(this->entry_menu, [this](u32 index) {
             if(this->entry_menu->GlassFocus(index)) {
                 if(this->entry_menu->IsFocusedEntrySuspended()) this->StartResume();
-                else this->menu_EntryInputPressed(HidNpadButton_A);
+                else {this->glass_shell->PrepareTransition();this->menu_EntryInputPressed(HidNpadButton_A);}
             }
         }, [this]() {
             this->SetGlassMode(false);
@@ -789,7 +789,7 @@ namespace ul::menu::ui {
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
         this->SetGlassMode(true);
-        UL_LOG_INFO("GlassNX v0.9: custom HOME layout created and selected");
+        UL_LOG_INFO("GlassNX v0.10: custom HOME layout created and selected");
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
@@ -982,6 +982,7 @@ namespace ul::menu::ui {
         this->UpdateDateText(this->date_text);
         this->UpdateBatteryTextAndTopIcons(this->battery_text, this->battery_top_icon, this->battery_charging_top_icon);
         UpdateScreenCaptureBackground(this->entry_menu->IsFocusedEntrySuspended());
+        if(IsScreenCaptureResumePending())return;
 
         if(!this->start_time_elapsed) {
             // Wait a bit before handling sent messages
@@ -1198,7 +1199,9 @@ namespace ul::menu::ui {
             i++;
         }
 
-        UL_RC_ASSERT(smi::TerminateApplication());
+        const auto rc=smi::TerminateApplication();
+        if(R_FAILED(rc)) {UL_LOG_WARN("GlassNX terminate failed: 0x%x",rc);g_MenuApplication->ShowNotification("Could not close game");return;}
+        if(this->glass_shell)this->glass_shell->PrepareTransition();
 
         if(i < entries.size()) {
             // We need to reload the application record since its kind/type changed after closing it

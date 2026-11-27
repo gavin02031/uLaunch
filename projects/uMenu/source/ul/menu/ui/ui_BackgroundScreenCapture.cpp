@@ -25,7 +25,8 @@ namespace ul::menu::ui {
             HidingForResume = 2,
             NotFocused = 3,
             ShowingGainedFocus = 4,
-            HidingLostFocus = 5
+            HidingLostFocus = 5,
+            ResumeRequested = 6
         };
 
         u8 g_ScreenCaptureBackgroundMinimumAlpha = 0xFF;
@@ -68,6 +69,7 @@ namespace ul::menu::ui {
     }
 
     void RequestResumeScreenCaptureBackground() {
+        if(!g_GlobalSettings.IsSuspended() || IsScreenCaptureResumePending())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::HidingForResume;
     }
 
@@ -77,10 +79,12 @@ namespace ul::menu::ui {
     }
 
     void RequestHideLoseFocusScreenCaptureBackground() {
+        if(IsScreenCaptureResumePending())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::HidingLostFocus;
     }
 
     void RequestShowGainFocusScreenCaptureBackground() {
+        if(IsScreenCaptureResumePending())return;
         g_ScreenCaptureBackgroundMode = SuspendedImageMode::ShowingGainedFocus;
     }
 
@@ -90,6 +94,10 @@ namespace ul::menu::ui {
 
     bool IsScreenCaptureBackgroundFocused() {
         return g_ScreenCaptureBackgroundMode == SuspendedImageMode::Focused;
+    }
+
+    bool IsScreenCaptureResumePending() {
+        return g_ScreenCaptureBackgroundMode==SuspendedImageMode::ResumeRequested || g_ScreenCaptureBackgroundMode==SuspendedImageMode::HidingForResume;
     }
 
     void UpdateScreenCaptureBackground(const bool after_start_stay_at_min_alpha) {
@@ -119,7 +127,13 @@ namespace ul::menu::ui {
             case SuspendedImageMode::HidingForResume: {
                 if(g_ScreenCaptureBackgroundAlpha == 0xFF) {
                     g_ScreenCaptureBackground->SetAlpha(g_ScreenCaptureBackgroundAlpha);
-                    UL_RC_ASSERT(smi::ResumeApplication());
+                    g_ScreenCaptureBackgroundMode=SuspendedImageMode::ResumeRequested;
+                    const auto rc=smi::ResumeApplication();
+                    if(R_FAILED(rc)) {
+                        UL_LOG_WARN("GlassNX resume failed: 0x%x",rc);
+                        RequestHideScreenCaptureBackground();
+                        g_MenuApplication->ShowNotification("Could not resume game");
+                    }
                 }
                 else {
                     g_ScreenCaptureBackground->SetAlpha(g_ScreenCaptureBackgroundAlpha);
@@ -130,6 +144,7 @@ namespace ul::menu::ui {
                 }
                 break;
             }
+            case SuspendedImageMode::ResumeRequested:
             case SuspendedImageMode::NotFocused: {
                 break;
             }

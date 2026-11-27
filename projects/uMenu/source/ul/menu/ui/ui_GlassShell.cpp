@@ -42,8 +42,28 @@ namespace ul::menu::ui {
         }
     }
     GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old,std::function<void()> back,std::function<void()> close)
-        :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();}
+        :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();
+        if(auto fp=fopen("sdmc:/glassnx/safe-mode","rb")){safe_mode=true;fclose(fp);}}
 
+    bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
+    void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
+    void GlassShell::PrepareTransition(){
+        ClearMaterials();texts.clear();banner.reset();banner_checked=false;
+        drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
+        next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    }
+    void GlassShell::ToggleSafeMode(){
+        if(safe_mode){
+            if(remove("sdmc:/glassnx/safe-mode")!=0){g_MenuApplication->ShowNotification("Could not disable safe mode");return;}
+            safe_mode=false;
+        } else {
+            auto fp=fopen("sdmc:/glassnx/safe-mode","wb");
+            if(!fp){g_MenuApplication->ShowNotification("Could not save safe mode");return;}
+            fclose(fp);safe_mode=true;
+        }
+        PrepareTransition();
+        g_MenuApplication->ShowNotification(safe_mode?"Safe rendering enabled":"Standard rendering enabled");
+    }
     float GlassShell::StepSpring(float value,float &velocity,float target,float dt) {
         // Critically damped analytic spring; independent of frame rate.
         constexpr float omega=19.f;
@@ -60,7 +80,7 @@ namespace ul::menu::ui {
         const int p=static_cast<int>(page);
         const float target=p<4?float(p):float(std::clamp(static_cast<int>(previous),0,3));
         if(animated_focus!=focus){animated_focus=focus;focus_lift=0;focus_velocity=0;}
-        if(!motion){nav_position=target;nav_velocity=0;focus_lift=0;focus_velocity=0;return;}
+        if(!motion||Conservative()){nav_position=target;nav_velocity=0;focus_lift=0;focus_velocity=0;return;}
         nav_position=StepSpring(nav_position,nav_velocity,target,dt);
         focus_lift=StepSpring(focus_lift,focus_velocity,1.f,dt);
     }
@@ -164,7 +184,7 @@ namespace ul::menu::ui {
         remove(temp.c_str());g_MenuApplication->ShowNotification("Could not save appearance settings");
     }
     void GlassShell::SetTheme(int index) {
-        theme=std::clamp(index,0,3);materials.clear();SavePreferences();
+        theme=std::clamp(index,0,3);ClearMaterials();SavePreferences();
         transition=std::chrono::steady_clock::now();
     }
     bool GlassShell::Favorite(u64 id) const {return std::find(favorites.begin(),favorites.end(),id)!=favorites.end();}
@@ -287,12 +307,16 @@ namespace ul::menu::ui {
         if(t && t->Get()) r->RenderTexture(t->Get(),x,y,pu::ui::render::TextureRenderOptions({},w,h,{},{},{}));
     }
     pu::sdl2::TextureHandle::Ref GlassShell::Material(int x,int y,int w,int h,bool selected) {
+        if(Conservative())return {};
         const auto key=std::to_string(x)+"/"+std::to_string(y)+"/"+std::to_string(w)+"/"+std::to_string(h)+"/"+std::to_string(theme)+"/"+std::to_string(glass)+"/"+std::to_string(blur)+"/"+std::to_string(selected);
         auto it=materials.find(key);if(it!=materials.end())return it->second;
         // Cache at half logical resolution; the GPU composites the translucent
         // textured bevel. No per-frame rasterization or framebuffer readback.
-        const int tw=(w+2)/3,th=(h+2)/3;
-        const float radius=std::min(13.f,th/2.f-1.f);
+        const int tw=(w+3)/4,th=(h+3)/4;
+        const size_t bytes=static_cast<size_t>(tw)*th*4;
+        if(bytes>2*1024*1024)return {};
+        if(material_bytes+bytes>6*1024*1024 || materials.size()>=48)ClearMaterials();
+        const float radius=std::max(2.f,std::min(14.f,th/2.f-1.f));
         const auto tint=GlassColors[theme];
         std::vector<u8> rgba(static_cast<size_t>(tw)*th*4);
         auto byte=[](float v){return static_cast<u8>(std::clamp(v,0.f,255.f));};
@@ -306,13 +330,13 @@ namespace ul::menu::ui {
             const float rim=std::max(0.f,1.f-std::abs(d+.65f)/1.25f);
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float angle=.28f+.72f*(1-v)*(1-v);
-            const float shine=(1.f-v)*.035f+rim*(selected?.58f:.28f)*angle+light*.045f;
+            const float shine=(1.f-v)*.06f+rim*(selected?.64f:.43f)*angle+light*.08f;
             const auto p=(static_cast<size_t>(py)*tw+px)*4;
             // Sample the real wallpaper with a low-frequency blur and edge
             // displacement. Cached per panel position, never reads the GPU framebuffer.
             const float edge=std::max(0.f,1.f-std::abs(d)/6.f);
-            const int sx=std::clamp(int((x+px*3+(px-tw*.5f)*edge*.11f)/8.f),0,239);
-            const int sy=std::clamp(int((y+py*3+(py-th*.5f)*edge*.11f)/8.f),0,134);
+            const int sx=std::clamp(int((x+px*4+(px-tw*.5f)*edge*.11f)/8.f),0,239);
+            const int sy=std::clamp(int((y+py*4+(py-th*.5f)*edge*.11f)/8.f),0,134);
             const int radius_sample=blur/15;
             for(int k=0;k<3;k++) {
                 const float tc=k==0?tint.r:k==1?tint.g:tint.b;
@@ -326,15 +350,15 @@ namespace ul::menu::ui {
                     const float sc=k==0?shade.r:k==1?shade.g:shade.b;
                     bg=bg*(1-shade.a/255.f)+sc*(shade.a/255.f);
                 }
-                const float colored=bg*.62f+tc*.38f;
+                const float colored=bg*.72f+tc*.28f;
                 rgba[p+k]=byte(colored+(255-colored)*shine);
             }
-            rgba[p+3]=byte(cover*((100-glass)*1.15f+70+14*(1-v)+rim*(selected?105:56)+light*10));
+            rgba[p+3]=byte(cover*((100-glass)*1.15f+92+20*(1-v)+rim*(selected?112:77)+light*14));
         }
         auto tex=SDL_CreateTexture(pu::ui::render::GetMainRenderer(),SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,tw,th);
         if(!tex)return {};
         if(SDL_UpdateTexture(tex,nullptr,rgba.data(),tw*4)!=0 || SDL_SetTextureBlendMode(tex,SDL_BLENDMODE_BLEND)!=0) {SDL_DestroyTexture(tex);return {};}
-        if(materials.size()>=96)materials.clear();
+        material_bytes+=bytes;
         auto handle=pu::sdl2::TextureHandle::New(tex);materials.emplace(key,handle);return handle;
     }
     void GlassShell::Card(Renderer &r,int x,int y,int w,int h,bool selected) {
@@ -344,8 +368,8 @@ namespace ul::menu::ui {
         if(tex)Picture(r,tex,x,y,w,h);
         else {
             const auto c=GlassColors[theme];
-            r->RenderRoundedRectangleFill({c.r,c.g,c.b,100},x,y,w,h,radius);
-            r->RenderRoundedRectangle({233,239,255,135},x,y,w,h,radius);
+            r->RenderRoundedRectangleFill({c.r,c.g,c.b,125},x,y,w,h,radius);
+            r->RenderRoundedRectangle({233,239,255,70},x,y,w,h,radius);
         }
         if(selected) {
             r->RenderRoundedRectangle({178,203,255,155},x-3,y-3,w+6,h+6,radius+3);
@@ -460,7 +484,7 @@ namespace ul::menu::ui {
         }
         for(int i=0;i<32;i++){inds[i*3]=0;inds[i*3+1]=1+i;inds[i*3+2]=1+(i+1)%32;}
         auto rr=pu::ui::render::GetMainRenderer();
-        if(SDL_RenderGeometry(rr,t->Get(),vertices,33,inds,96)==0)return;
+        if(!Conservative() && SDL_RenderGeometry(rr,t->Get(),vertices,33,inds,96)==0)return;
         // Some Switch SDL backends do not implement textured geometry.
         // Clip using horizontal texture bands instead of falling back to square art.
         const int corner=std::max(1,int(rad));
@@ -474,7 +498,7 @@ namespace ul::menu::ui {
             SDL_Rect dst{x+inset,y+y0,w-2*inset,y1-y0};
             SDL_RenderCopy(rr,t->Get(),&src,&dst);
         };
-        const int step=std::max(1,corner/12);
+        const int step=std::max(1,corner/(Conservative()?5:10));
         for(int a=0;a<corner;a+=step) {
             const int b=std::min(a+step,corner);
             const float dy=corner-(a+b)*.5f;
@@ -490,7 +514,7 @@ namespace ul::menu::ui {
         auto icon=entries->GlassIcon(index,icon_budget);
         if(!icon && e.Is<EntryType::Application>()) icon=GetDefaultApplicationIconTexture();
         const int base_side=std::min(w-20,h-54);
-        const int lift=selected&&motion?int(5*focus_lift):0;
+        const int lift=selected&&motion&&!Conservative()?int(5*focus_lift):0;
         const int side=base_side+lift*2;
         const int ix=x+(w-side)/2,iy=y+5-lift;
         const int rounding=std::max(20,side/6);
@@ -521,8 +545,8 @@ namespace ul::menu::ui {
     }
     void GlassShell::ReadMetrics() {
         const auto now=std::chrono::steady_clock::now();
-        if(now<next_metrics)return;
-        next_metrics=now+std::chrono::seconds(2);
+        if(now<next_metrics||Conservative())return;
+        next_metrics=now+std::chrono::seconds(page==Page::Control?8:30);
         brightness=volume=-1;temperature=-1;free_bytes=total_bytes=-1;
         if(R_SUCCEEDED(lblInitialize())) {
             float v=0;if(R_SUCCEEDED(lblGetCurrentBrightnessSetting(&v)) && std::isfinite(v))brightness=std::clamp(v,0.f,1.f);
@@ -577,7 +601,7 @@ namespace ul::menu::ui {
             if(ok)volume=target;
         }
         if(!ok)g_MenuApplication->ShowNotification("Control is unavailable");
-        next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+        next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(8);
     }
     void GlassShell::Slider(Renderer &r,int x,int y,int w,int h,const std::string &name,float value,bool selected) {
         Card(r,x,y,w,h,selected);
@@ -627,14 +651,15 @@ namespace ul::menu::ui {
                         row("Manage entries","Folders and shortcuts",legacy);
                         row("Installed themes","Theme manager",[](){ShowThemesMenu();});break;
                     case 7:
-                        row("GlassNX","Version 0.9",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.10",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
+                        row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Recovery","Legacy interface",legacy);break;
                 }
                 return c;
             }
-            c={{466,480,1360,90,"Glass transparency",std::to_string(glass)+"%",[this](){glass=glass>=85?35:glass+10;materials.clear();SavePreferences();}},
-               {466,580,1360,90,"Blur strength",std::to_string(blur)+"%",[this](){blur=blur>=100?0:std::min(100,blur+20);materials.clear();SavePreferences();}},
+            c={{466,480,1360,90,"Glass transparency",std::to_string(glass)+"%",[this](){glass=glass>=85?35:glass+10;ClearMaterials();SavePreferences();}},
+               {466,580,1360,90,"Blur strength",std::to_string(blur)+"%",[this](){blur=blur>=100?0:std::min(100,blur+20);ClearMaterials();SavePreferences();}},
                {466,680,1360,90,"UI Motion",motion?"On":"Off",[this](){motion=!motion;SavePreferences();}},
                {466,780,650,90,"Lock screen","Open now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
                {1136,780,690,90,"System settings","Native controls",[](){ShowSettingsMenu();}},
@@ -684,7 +709,7 @@ namespace ul::menu::ui {
             touched=false;drag_slider=-1;
         } else if(touched && drag_slider>=0 && page==Page::Control) {
             const auto now=std::chrono::steady_clock::now();
-            if(now-slider_tick>=std::chrono::milliseconds(85)) {
+            if(now-slider_tick>=std::chrono::milliseconds(200)) {
                 slider_tick=now;
                 const float value=std::clamp(float(679-touch.y)/309.f,0.f,1.f);
                 if(std::abs(value-(drag_slider==0?brightness:volume))>.025f)AdjustSlider(drag_slider==0,value);
@@ -693,8 +718,8 @@ namespace ul::menu::ui {
         } else if(!touched) {
             touched=true;
             if(page==Page::Settings && setting_section==0) {
-                if(touch.HitsRegion(1216,480,530,90)){glass=std::clamp(int((touch.x-1216)*100/530),35,85);materials.clear();SavePreferences();return;}
-                if(touch.HitsRegion(1216,580,530,90)){blur=std::clamp(int((touch.x-1216)*100/530),0,100);materials.clear();SavePreferences();return;}
+                if(touch.HitsRegion(1216,480,530,90)){glass=std::clamp(int((touch.x-1216)*100/530),35,85);ClearMaterials();SavePreferences();return;}
+                if(touch.HitsRegion(1216,580,530,90)){blur=std::clamp(int((touch.x-1216)*100/530),0,100);ClearMaterials();SavePreferences();return;}
             }
             if(page==Page::Control) {
                 if(touch.HitsRegion(780,255,240,475)){focus=0;drag_slider=0;slider_tick=std::chrono::steady_clock::now();AdjustSlider(true,float(679-touch.y)/309.f);return;}
@@ -762,7 +787,7 @@ namespace ul::menu::ui {
         if(Tints[theme].a)r->RenderRectangleFill(Tints[theme],0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,"v0.9",130,76,27);
+        Label(r,safe_mode?"v0.10 · SAFE":"v0.10",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -795,7 +820,7 @@ namespace ul::menu::ui {
             if(!list.empty()) {
                 const auto idx=list[focus];auto &e=entries->GetEntries()[idx];
                 const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
-                auto wide=e.Is<EntryType::Application>()?Banner(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
+                auto wide=e.Is<EntryType::Application>()&&!Conservative()?Banner(e.app_info.app_id):pu::sdl2::TextureHandle::Ref{};
                 auto icon=entries->GlassIcon(idx,icon_budget);if(!icon&&e.Is<EntryType::Application>())icon=GetDefaultApplicationIconTexture();
                 if(wide) {
                     RoundedArt(r,wide,85,155,1130,405,32);
@@ -803,7 +828,7 @@ namespace ul::menu::ui {
                 } else if(icon) {
                     // Installed icon as artwork-derived backdrop, not invented wide banner.
                     auto tex=icon->Get();
-                    if(tex) {
+                    if(tex&&!Conservative()) {
                         Uint8 rr=255,gg=255,bb=255;
                         SDL_GetTextureColorMod(tex,&rr,&gg,&bb);
                         SDL_SetTextureColorMod(tex,102,108,146);
@@ -948,7 +973,7 @@ namespace ul::menu::ui {
             }
             Label(r,"A  Select     B  Home     ZL/ZR  Control     +  Notifications",70,1005,30);
         }
-        if(motion) {
+        if(motion&&!Conservative()) {
             const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-transition).count();
             if(elapsed>=0 && elapsed<220) {
                 const float t=1.f-static_cast<float>(elapsed)/220.f;
