@@ -1,3 +1,4 @@
+#include <ul/menu/ui/ui_GlassSystemPanel.hpp>
 #include <ul/menu/ui/ui_ThemesMenuLayout.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/fs/fs_Stdio.hpp>
@@ -9,6 +10,9 @@ extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 namespace ul::menu::ui {
 
     ThemesMenuLayout::ThemesMenuLayout() : IMenuLayout() {
+        auto brand=pu::ui::elm::TextBlock::New(70,45,"GlassNX  /  Appearance");
+        brand->SetFont(pu::ui::MakeDefaultFontName(30));brand->SetColor({238,244,255,225});this->Add(brand);
+        this->Add(GlassSystemPanel::New(70,120,1780,930));
         this->info_text = pu::ui::elm::TextBlock::New(0, 0, GetLanguageString("theme_info_text"));
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("themes_menu", "info_text", this->info_text);

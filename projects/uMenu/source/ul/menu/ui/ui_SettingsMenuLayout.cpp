@@ -1,3 +1,4 @@
+#include <ul/menu/ui/ui_GlassSystemPanel.hpp>
 #include <ul/menu/ui/ui_SettingsMenuLayout.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/fs/fs_Stdio.hpp>
@@ -887,6 +888,10 @@ namespace ul::menu::ui {
         this->setting_save_sfx = nullptr;
         this->back_sfx = nullptr;
 
+        auto brand=pu::ui::elm::TextBlock::New(70,48,"GlassNX  /  System");
+        brand->SetFont(pu::ui::MakeDefaultFontName(30));
+        brand->SetColor({238,244,255,225});this->Add(brand);
+        this->Add(GlassSystemPanel::New(48,165,1824,785));
         this->menu_text = pu::ui::elm::TextBlock::New(0, 0, "...");
         this->menu_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("settings_menu", "menu_text", this->menu_text);
@@ -912,7 +917,7 @@ namespace ul::menu::ui {
         this->Add(this->input_bar);
         this->inputs_changed = true;
 
-        this->Add(GetScreenCaptureBackground());
+        // Never layer a suspended game's capture above system settings.
     }
 
     void SettingsMenuLayout::LoadSfx() {
