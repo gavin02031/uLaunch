@@ -86,6 +86,9 @@ namespace ul::menu::ui {
         LiquidGlass liquid_glass;
         void ToggleEnhancedGlass();
         size_t material_bytes = 0;
+        bool geometry_supported=true;
+        bool last_conservative=false;
+        unsigned material_budget=2;
         void ClearMaterials();
         bool Conservative() const;
         void ToggleSafeMode();

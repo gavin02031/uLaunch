@@ -39,27 +39,13 @@ namespace ul::menu::ui {
         g_ScreenCaptureBackground = RawRgbaImage::New(0, 0);
         g_ScreenCaptureBackgroundAlpha=0xFF;
         g_ScreenCaptureBackgroundMode=SuspendedImageMode::ShowingAfterStart;
-        if(start_mode != smi::MenuStartMode::StartupMenuPostBoot) {
-            auto capture_buf = new u8[CaptureBufferSize]();
-            bool flag=false;
-            Result capture_rc=0;
-            if(g_GlobalSettings.IsSuspended()) {
-                // Get last app capture image
-                capture_rc=appletGetLastApplicationCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
-            }
-            else {
-                // Get last applet capture image
-                capture_rc=appletGetLastForegroundCaptureImageEx(capture_buf, CaptureBufferSize, &flag);
-            }
-            appletClearCaptureBuffer(true, AppletCaptureSharedBuffer_CallerApplet, 0xFF000000);
-
-            if(R_SUCCEEDED(capture_rc) && flag)g_ScreenCaptureBackground->LoadImage(capture_buf, CaptureBufferWidth, CaptureBufferHeight, CaptureBufferBytesPerPixel);
-            else delete[] capture_buf;
-
-            // Force-scale to 1080p
-            g_ScreenCaptureBackground->SetWidth(pu::ui::render::ScreenWidth);
-            g_ScreenCaptureBackground->SetHeight(pu::ui::render::ScreenHeight);
-        }
+        // GlassNX never draws the old capture in its HOME. Avoid allocating
+        // or clearing a game framebuffer entirely. Legacy recovery retains
+        // functional navigation/resume, but uses the wallpaper, not a capture.
+        (void)start_mode;
+        g_ScreenCaptureBackgroundMode=SuspendedImageMode::NotFocused;
+        g_ScreenCaptureBackgroundAlpha=0;
+        g_ScreenCaptureBackground->SetAlpha(0);
 
         g_ScreenCaptureBackgroundMinimumAlpha = (u8)GetRequiredUiValue<u32>("suspended_app_final_alpha");
     }

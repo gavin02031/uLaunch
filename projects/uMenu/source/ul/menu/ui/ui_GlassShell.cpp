@@ -45,13 +45,14 @@ namespace ul::menu::ui {
     GlassShell::GlassShell(EntryMenu::Ref e,std::function<void(u32)> l,std::function<void()> old,std::function<void()> back,std::function<void()> close)
         :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();
         if(auto fp=fopen("sdmc:/glassnx/safe-mode","rb")){safe_mode=true;fclose(fp);}
-        if(auto fp=fopen("sdmc:/glassnx/enhanced-glass","rb")){enhanced_glass=true;fclose(fp);}}
+        if(auto fp=fopen("sdmc:/glassnx/enhanced-glass","rb")){enhanced_glass=true;fclose(fp);}
+        last_conservative=Conservative();}
 
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
         liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();banner_checked=false;
-        drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
+        theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
     }
     void GlassShell::ToggleEnhancedGlass(){
@@ -235,9 +236,9 @@ namespace ul::menu::ui {
         char name[120]={};snprintf(name,sizeof(name),"sdmc:/glassnx/art/%016llx.cover",static_cast<unsigned long long>(id));
         auto fp=fopen(name,"rb");if(!fp){custom_icons.emplace(id,pu::sdl2::TextureHandle::Ref{});return {};}
         const auto size=fseek(fp,0,SEEK_END)==0?ftell(fp):-1;fclose(fp);
-        if(size<=0||size>3*1024*1024)return {};
+        if(size<=0||size>3*1024*1024){custom_icons.emplace(id,pu::sdl2::TextureHandle::Ref{});return {};}
         icon_budget=false;
-        auto image=IMG_Load(name);if(!image)return {};
+        auto image=IMG_Load(name);if(!image){custom_icons.emplace(id,pu::sdl2::TextureHandle::Ref{});return {};}
         SDL_Texture *tex=nullptr;
         if(image->w>0&&image->h>0&&image->w<=1024&&image->h<=1024){
             auto small=SDL_CreateRGBSurfaceWithFormat(0,256,256,32,SDL_PIXELFORMAT_RGBA32);
@@ -403,9 +404,23 @@ namespace ul::menu::ui {
         if(!fp)return {};
         const bool seek_ok=fseek(fp,0,SEEK_END)==0;
         const long length=seek_ok?ftell(fp):-1;fclose(fp);
-        if(length<=0||length>8*1024*1024)return {};
-        auto tex=pu::ui::render::LoadImageFromFile(name);
-        if(tex)banner=pu::sdl2::TextureHandle::New(tex);
+        if(length<=0||length>3*1024*1024)return {};
+        auto image=IMG_Load(name);if(!image)return {};
+        if(image->w>0&&image->h>0&&image->w<=1920&&image->h<=1080){
+            auto scaled=SDL_CreateRGBSurfaceWithFormat(0,960,540,32,SDL_PIXELFORMAT_RGBA32);
+            if(scaled){
+                // Center-crop to the cached 16:9 texture, preserving aspect ratio.
+                SDL_Rect crop{0,0,image->w,image->h};
+                if(image->w*9>image->h*16){crop.w=image->h*16/9;crop.x=(image->w-crop.w)/2;}
+                else {crop.h=image->w*9/16;crop.y=(image->h-crop.h)/2;}
+                if(crop.w>0&&crop.h>0&&SDL_BlitScaled(image,&crop,scaled,nullptr)==0){
+                    auto tex=SDL_CreateTextureFromSurface(pu::ui::render::GetMainRenderer(),scaled);
+                    if(tex)banner=pu::sdl2::TextureHandle::New(tex);
+                }
+                SDL_FreeSurface(scaled);
+            }
+        }
+        SDL_FreeSurface(image);
         return banner;
     }
     void GlassShell::Cover(Renderer &r,const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h) {
@@ -437,6 +452,7 @@ namespace ul::menu::ui {
             previous=page;previous_focus=focus;previous_offset=offset;previous_filter=filter;previous_section=setting_section;previous_search=search;
         }
         if(p==Page::Settings)setting_section=0;
+        if(p==Page::Control&&!Conservative())next_metrics={};
         page=p; focus=0;offset=0;filter=0;alert_offset=0;animated_focus=-1;search.clear();hits.clear();transition=std::chrono::steady_clock::now();
     }
     std::vector<u32> GlassShell::List() {
@@ -493,8 +509,17 @@ namespace ul::menu::ui {
         // textured bevel. No per-frame rasterization or framebuffer readback.
         const int tw=(w+3)/4,th=(h+3)/4;
         const size_t bytes=static_cast<size_t>(tw)*th*4;
-        if(bytes>2*1024*1024)return {};
-        if(material_bytes+bytes>6*1024*1024 || materials.size()>=48)ClearMaterials();
+        if(bytes>2*1024*1024||material_budget==0)return {};
+        // Do not churn every cached panel when a large page fills the cache.
+        while(!materials.empty()&&(material_bytes+bytes>6*1024*1024 || materials.size()>=48)){
+            auto victim=materials.begin();int vw=0,vh=0;
+            if(victim->second&&SDL_QueryTexture(victim->second->Get(),nullptr,nullptr,&vw,&vh)==0&&vw>0&&vh>0){
+                const size_t used=size_t(vw)*vh*4;material_bytes-=std::min(material_bytes,used);
+            }
+            materials.erase(victim);
+        }
+        if(material_bytes+bytes>6*1024*1024)return {};
+        --material_budget;
         const float radius=std::max(2.f,std::min(13.f,std::min(tw,th)/2.f-1.f));
         const auto tint=GlassColors[theme];
         std::vector<u8> rgba(static_cast<size_t>(tw)*th*4);
@@ -566,7 +591,7 @@ namespace ul::menu::ui {
         const auto key=std::to_string(size)+"/"+std::to_string(maxw)+"/"+s;
         auto it=texts.find(key);
         if(it==texts.end()) {
-            if(texts.size()>=160) texts.clear();
+            if(texts.size()>=160) texts.erase(texts.begin());
             auto t=pu::ui::elm::TextBlock::New(0,0,s);
             t->SetFont(pu::ui::MakeDefaultFontName(size));
             t->SetColor(size<30?pu::ui::Color{231,238,255,235}:pu::ui::Color{255,255,255,255});
@@ -686,7 +711,10 @@ namespace ul::menu::ui {
         }
         for(int i=0;i<32;i++){inds[i*3]=0;inds[i*3+1]=1+i;inds[i*3+2]=1+(i+1)%32;}
         auto rr=pu::ui::render::GetMainRenderer();
-        if(!Conservative() && SDL_RenderGeometry(rr,t->Get(),vertices,33,inds,96)==0)return;
+        if(!Conservative()&&geometry_supported){
+            if(SDL_RenderGeometry(rr,t->Get(),vertices,33,inds,96)==0)return;
+            geometry_supported=false;UL_LOG_WARN("GlassNX: rounded geometry unavailable; using compatibility path");
+        }
         // Some Switch SDL backends do not implement textured geometry.
         // Clip using horizontal texture bands instead of falling back to square art.
         const int corner=std::max(1,int(rad));
@@ -828,7 +856,7 @@ namespace ul::menu::ui {
         Label(r,name,x+w/2,y+22,30,w-18,true);
         Label(r,value<0?"N/A":std::to_string(int(value*100+.5f))+"%",x+w/2,y+70,30,0,true);
         const int left=x+46,top=y+115,width=w-92,height=h-166;
-        r->RenderRoundedRectangleFill({15,24,52,138},left,top,width,height,width/2);
+        r->RenderRoundedRectangleFill({15,24,52,170},left,top,width,height,width/2);
         r->RenderRoundedRectangle({217,232,255,80},left,top,width,height,width/2);
         if(value>=0) {
             const int amount=int(height*value);
@@ -892,7 +920,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.15",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.16",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1012,7 +1040,12 @@ namespace ul::menu::ui {
         SDL_BlendMode old=SDL_BLENDMODE_NONE;
         SDL_GetRenderDrawBlendMode(rr,&old);
         SDL_SetRenderDrawBlendMode(rr,SDL_BLENDMODE_BLEND);
-        SDL_RenderGeometry(rr,nullptr,v,6,inds,12);
+        if(!geometry_supported||SDL_RenderGeometry(rr,nullptr,v,6,inds,12)!=0){
+            // Small strip-based gradient on backends lacking geometry.
+            for(int i=0;i<20;++i){const int left=x+i*w/20,right=x+(i+1)*w/20;
+                const auto a=static_cast<Uint8>(225*(1.f-i/20.f));SDL_SetRenderDrawColor(rr,14,18,40,a);
+                SDL_Rect strip{left,y,right-left,h};SDL_RenderFillRect(rr,&strip);}
+        }
         SDL_SetRenderDrawBlendMode(rr,old);
     }
     void GlassShell::BatteryGlyph(Renderer &r,int x,int y,int size) {
@@ -1024,7 +1057,13 @@ namespace ul::menu::ui {
         if(fill>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245},x+4,y+size/4+4,fill,height-8,std::min(4,fill/2));
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
-        hits.clear();icon_budget=true;UpdateMotion();FrameDiagnostics();
+        hits.clear();icon_budget=true;material_budget=2;
+        const bool conservative=Conservative();
+        if(conservative!=last_conservative){
+            last_conservative=conservative;PrepareTransition();
+            if(!conservative)next_metrics={};
+        }
+        UpdateMotion();FrameDiagnostics();
         if(page!=Page::Settings||setting_section!=0)theme_previews.clear();
         if(enhanced_glass&&!Conservative()) {
             const auto wallpaper=ActiveWallpaper();const auto tint=WallpaperTint();
@@ -1035,14 +1074,15 @@ namespace ul::menu::ui {
         const auto scrim=WallpaperTint();if(scrim.a)r->RenderRectangleFill(scrim,0,0,1920,1080);
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.15 · SAFE":"v0.15",130,76,27);
+        Label(r,safe_mode?"v0.16 · SAFE":"v0.16",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
         const char *navicons[]={"home","games","apps","settings"};
         const int pill=565+int(nav_position*198);
         r->RenderRoundedRectangleFill({171,185,241,112},pill,32,190,64,32);
-        r->RenderRoundedRectangle({218,229,255,115},pill,32,190,64,32);
+        r->RenderRoundedRectangle({218,229,255,155},pill,32,190,64,32);
+        r->RenderRoundedRectangleFill({247,249,255,70},pill+25,34,140,3,1);
         for(int i=0;i<4;++i)Segment(r,565+i*198,32,190,64,navicons[i],tabs[i],false,[this,i](){SetPage(static_cast<Page>(i));});
         Label(r,Clock(),1480,43,30);
         if(g_GlobalSettings.wireless_lan_enabled)Glyph(r,"wifi",1600,40,34);
@@ -1071,6 +1111,7 @@ namespace ul::menu::ui {
             Label(r,temperature<0?"Temp unavailable":std::to_string(temperature)+" C",1530,241,30,275);
             Glyph(r,"storage",1298,392,32);Label(r,"Storage",1345,391,30);
             Label(r,StorageText(),1300,446,45,500);
+            if(total_bytes>0&&free_bytes>=0)Label(r,"SD card",1660,405,27,145);
             if(total_bytes>0 && free_bytes>=0) {
                 r->RenderRoundedRectangleFill({32,38,74,100},1300,520,500,17,8);
                 const auto used=std::clamp(1.0-double(free_bytes)/double(total_bytes),0.0,1.0);
@@ -1098,7 +1139,10 @@ namespace ul::menu::ui {
                     }
                     RoundedArt(r,icon,805,165,390,390,58);
                 }
-                Label(r,suspended?"CONTINUE PLAYING":"FEATURED GAME",112,185,30);
+                if(suspended){
+                    r->RenderRoundedRectangleFill({94,156,139,205},112,174,18,18,9);
+                    Label(r,"CONTINUE PLAYING",142,168,30,620);
+                }else Label(r,"FEATURED GAME",112,185,30);
                 Label(r,EntryName(e),112,260,64,650);
                 Label(r,suspended?"Currently suspended":"Ready to play",112,362,30,680);
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
@@ -1117,7 +1161,7 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
-            Label(r,"Recently played",385,606,27,330);
+            Label(r,"R Stick  Options",385,606,27,330);
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,276,focus==offset+i);

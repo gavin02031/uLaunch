@@ -6,7 +6,7 @@ export VERSION	:=	$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO)
 export UL_DEFS	:=	-DUL_MAJOR=$(VERSION_MAJOR) -DUL_MINOR=$(VERSION_MINOR) -DUL_MICRO=$(VERSION_MICRO) -DUL_VERSION=\"$(VERSION)\"
 
 OUT_DIR				:=	SdOut
-OUT_DIR_ZIP			:=	GlassNX-v0.15
+OUT_DIR_ZIP			:=	GlassNX-v0.16
 
 OUT_THEME_MUSIC		:=	default-theme-music-v$(VERSION).ultheme
 THEME_MUSIC_TEMP	:=	default-theme-music-tmp
@@ -33,8 +33,7 @@ libs:
 	@$(MAKE) -C libs/libnx-ext/libnx-ipcext/
 
 arc:
-	@python arc/arc.py gen_db default+./libs/uCommon/include/ul/ul_Results.rc.hpp
-	@python arc/arc.py gen_cpp rc UL ./libs/uCommon/include/ul/ul_Results.gen.hpp
+	@python3 tools/generate_results.py
 
 usystem: arc libs
 	@$(MAKE) -C projects/uSystem
