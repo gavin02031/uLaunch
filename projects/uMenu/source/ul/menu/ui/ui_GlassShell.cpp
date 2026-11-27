@@ -112,6 +112,7 @@ namespace ul::menu::ui {
             SetPage(previous);focus=previous_focus;offset=previous_offset;filter=previous_filter;setting_section=previous_section;search=previous_search;return;
         }
         if(page==Page::Settings&&setting_section!=0){Section(0);return;}
+        if(page==Page::Library&&filter==4){SetPage(Page::Home);return;}
         if((page==Page::Library||page==Page::Home||page==Page::Apps)&&!entries->IsInRoot()){folder_back();Invalidate();return;}
         SetPage(Page::Home);
     }
@@ -469,7 +470,10 @@ namespace ul::menu::ui {
     }
     void GlassShell::ApplySearch(const std::string &query){
         // HOME search spans all entries in the current folder; never recurse the SD card.
-        if(page==Page::Home){SetPage(Page::Library);filter=4;}
+        if(page==Page::Home){
+            if(query.empty())return;
+            SetPage(Page::Library);filter=4;
+        } else if(page==Page::Library&&filter==4&&query.empty())filter=0;
         search=query;focus=offset=0;
     }
     void GlassShell::Search() {
@@ -551,7 +555,8 @@ namespace ul::menu::ui {
         Label(r,"B  Cancel",1490,218,30,260);
         hits.push_back({1450,188,300,84,[this](){FinishKeyboard(false);}});
         ul::glassnx::DrawSurface(r,175,278,1570,105,32,{13,23,48,200});
-        Label(r,keyboard_draft.empty()?"Type a game or app name":keyboard_draft+" |",205,309,37,1500);
+        Label(r,keyboard_draft.empty()?"Type a game or app name":keyboard_draft+" |",205,309,37,1370);
+        Label(r,std::to_string(keyboard_draft.size())+"/127",1605,320,27,115,true);
         for(int i=0;i<45;i++){
             const bool action=i>=40;
             const int x=action?175+(i-40)*316:175+(i%10)*158;
@@ -561,6 +566,7 @@ namespace ul::menu::ui {
             const auto color=selected?pu::ui::Color{144,176,236,235}:active?pu::ui::Color{104,145,211,210}:i==44?pu::ui::Color{68,137,194,215}:pu::ui::Color{112,133,179,130};
             r->RenderRoundedRectangleFill(color,x,y,w,78,20);
             r->RenderRoundedRectangle({230,239,255,static_cast<u8>(selected?230:90)},x,y,w,78,20);
+            if(selected)r->RenderRoundedRectangle({246,250,255,110},x+3,y+3,w-6,72,17);
             std::string key;
             if(action)key=KeyboardActions[i-40];
             else {char ch=(keyboard_symbols?KeyboardSymbolRows:KeyboardRows)[i/10][i%10];if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));key=std::string(1,ch);}
@@ -624,14 +630,16 @@ namespace ul::menu::ui {
     void GlassShell::RenderDock(Renderer &r){
         // Shared lens with icon-first shortcuts, a restrained raised selection,
         // and a detached silhouette. No additional full-screen render target.
+        r->RenderRoundedRectangleFill({10,16,39,75},368,925,1184,134,58);
         Card(r,370,920,1180,132);
         // A second subtle edge, not another opaque card over the material.
         r->RenderRoundedRectangle({238,248,255,95},374,924,1172,124,50);
+        r->RenderRoundedRectangleFill({241,246,255,60},420,925,1080,3,1);
         const char *icons[]={"bell","sun",DockShortcutIcons[dock_shortcut],"settings","power"};
         const char *names[]={"Alerts","Control",DockShortcutNames[dock_shortcut],"Settings","Power"};
         for(int i=0;i<5;i++){
             const int x=390+i*230;
-            if(dock_focus==i)ul::glassnx::DrawSurface(r,x,931,220,110,42,{146,170,230,130},true);
+            if(dock_focus==i)ul::glassnx::DrawSurface(r,x+12,934,196,108,42,{146,170,230,130},true);
             const bool selected=dock_focus==i;
             const float lift=motion&&!Conservative()?dock_lift[i]:(selected?1.f:0.f);
             const int side=68+int(22*lift),ix=x+110-side/2,iy=932-int(15*lift);
@@ -642,12 +650,15 @@ namespace ul::menu::ui {
                 Glyph(r,icons[i],ix+(side-glyph)/2,iy+(side-glyph)/2,glyph);
             }
             Label(r,names[i],x+110,1009,27,208,true);
+            if(selected)r->RenderRoundedRectangleFill({230,241,255,210},x+95,1041,30,4,1);
             hits.push_back({x,928,220,116,[this,i](){ActivateDock(i);}});
         }
         const auto alerts=g_MenuApplication->GetNotificationHistory().size();
         if(alerts){
-            r->RenderCircleFill({147,101,162,255},535,946,18);
-            Label(r,alerts>9?"9+":std::to_string(alerts),535,931,27,0,true);
+            const float lift=motion&&!Conservative()?dock_lift[0]:(dock_focus==0?1.f:0.f);
+            const int bx=500+(68+int(22*lift))/2-2,by=937-int(15*lift);
+            r->RenderCircleFill({147,101,162,255},bx,by,18);
+            Label(r,alerts>9?"9+":std::to_string(alerts),bx,by-15,27,0,true);
         }
     }
     void GlassShell::LoadBackdrop() {
@@ -758,13 +769,14 @@ namespace ul::menu::ui {
     std::vector<u32> GlassShell::List() {
         std::vector<u32> result;
         auto &all=entries->GetEntries();
+        const auto needle=Fold(search);
         for(u32 i=0;i<all.size();++i) {
             auto &e=all[i];
             if(e.Is<EntryType::Invalid>())continue;
-            if(!search.empty() && Fold(EntryName(e)).find(Fold(search))==std::string::npos)continue;
+            const auto name=Fold(EntryName(e));
+            if(!needle.empty() && name.find(needle)==std::string::npos)continue;
             // Installed forwarders can be reported as applications by Horizon.
             // Keep known utilities out of the game shelf; never hide unknown titles.
-            const auto name=Fold(EntryName(e));
             bool utility=e.Is<EntryType::Application>() &&
                 (name=="sphaira" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
                  name=="youtube tv" || name=="youtube" || name=="streamfin" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
@@ -1094,12 +1106,12 @@ namespace ul::menu::ui {
             Label(r,"★",x+w-30,y+11,27,0,true);
         }
         hits.push_back({x,y,w,h,[this,index](){
+            const bool from_dock=dock_focus>=0;
             dock_focus=-1;
             const auto list=List();const auto it=std::find(list.begin(),list.end(),index);
             if(it==list.end())return;
-            dock_focus=-1;
             const int next=static_cast<int>(it-list.begin());
-            if(next!=focus){focus=next;return;}
+            if(next!=focus||from_dock){focus=next;return;}
             launch(index);
         }});
     }
@@ -1248,7 +1260,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.20",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.21",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1343,9 +1355,13 @@ namespace ul::menu::ui {
             if(page==Page::Home){dock_focus=-1;Search();return;}
             if(page==Page::Notifications){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());return;}
             if(page==Page::Settings){Section((setting_section+1)%8);return;}
-            if(page==Page::Library || page==Page::Apps){filter=(filter+1)%4;focus=0;offset=0;}return;
+            if(page==Page::Library || page==Page::Apps){
+                if(page==Page::Library&&filter==4){filter=0;search.clear();}
+                else filter=(filter+1)%4;
+                focus=0;offset=0;
+            }return;
         }
-        if((page==Page::Home||page==Page::Library||page==Page::Apps) && (down&HidNpadButton_StickR)){TitleOptions();return;}
+        if((page==Page::Home||page==Page::Library||page==Page::Apps) && (down&HidNpadButton_StickR)){if(dock_focus<0)TitleOptions();return;}
         if(down&HidNpadButton_X) {
             if(page==Page::Home && g_GlobalSettings.IsSuspended()){OpenCloseSheet();return;}
             if(page==Page::Library||page==Page::Apps){Search();return;}
@@ -1359,8 +1375,13 @@ namespace ul::menu::ui {
                 if(down&(HidNpadButton_Down|HidNpadButton_StickLDown))return;
             }else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown)){dock_focus=0;return;}
         }
-        if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){ToggleFavorite();return;}
+        if((page==Page::Home||page==Page::Library) && (down&HidNpadButton_StickL)){if(dock_focus<0)ToggleFavorite();return;}
         if(page==Page::Settings && (down&HidNpadButton_X)){SetTheme((theme+1)%4);return;}
+        if(page==Page::Settings&&setting_section==0&&focus<2&&(down&(HidNpadButton_Left|HidNpadButton_Right|HidNpadButton_StickLLeft|HidNpadButton_StickLRight))){
+            const int delta=(down&(HidNpadButton_Right|HidNpadButton_StickLRight))?5:-5;
+            if(focus==0)glass=std::clamp(glass+delta,35,85);else blur=std::clamp(blur+delta,0,100);
+            ClearMaterials();SavePreferences();return;
+        }
         if(page==Page::Control && focus<2 && (down&(HidNpadButton_Left|HidNpadButton_Right|HidNpadButton_StickLLeft|HidNpadButton_StickLRight))) {
             const float delta=(down&(HidNpadButton_Right|HidNpadButton_StickLRight))?.05f:-.05f;
             AdjustSlider(focus==0,(focus==0?brightness:volume)+delta);
@@ -1396,7 +1417,12 @@ namespace ul::menu::ui {
         r->RenderRoundedRectangle({240,245,255,200},x,y+size/4,width,height,5);
         r->RenderRectangleFill({240,245,255,200},x+width+2,y+size*3/8,3,size/4);
         const int fill=(width-8)*pct/100;
-        if(fill>0)r->RenderRoundedRectangleFill(pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245},x+4,y+size/4+4,fill,height-8,std::min(4,fill/2));
+        if(fill>0){
+            const auto color=pct<=15?pu::ui::Color{255,122,138,255}:pu::ui::Color{235,243,255,245};
+            const int radius=std::min(4,std::min(fill,height-8)/2-1);
+            if(radius>0)r->RenderRoundedRectangleFill(color,x+4,y+size/4+4,fill,height-8,radius);
+            else r->RenderRectangleFill(color,x+4,y+size/4+4,fill,height-8);
+        }
     }
     void GlassShell::OnRender(Renderer &r,const s32,const s32) {
         hits.clear();icon_budget=true;material_budget=2;symbol_budget=3;
@@ -1417,7 +1443,7 @@ namespace ul::menu::ui {
         if(gallery.active){RenderGallery(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,38);
         Label(r,"GlassNX",128,25,45);
-        Label(r,safe_mode?"v0.20 · SAFE":"v0.20",130,76,27);
+        Label(r,safe_mode?"v0.21 · SAFE":"v0.21",130,76,27);
         hits.push_back({44,24,76,76,[](){ShowUserPage();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
@@ -1503,7 +1529,7 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Your games",75,600,37);
-            Label(r,"R Stick Options   ·   ↓ Dock",385,606,27,570);
+            Label(r,dock_focus>=0?"A Open  ·  Up / B Back":"R Stick Options   ·   Down Dock",385,606,27,570);
             IconButton(r,1000,590,240,52,"search","Y Search",false,[this](){dock_focus=-1;Search();});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
             if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
@@ -1544,7 +1570,7 @@ namespace ul::menu::ui {
                 const int columns=games?5:6;
                 Tile(r,list[offset+i],(games?400:88)+(i%columns)*(games?290:293),(games?320:389)+(i/columns)*(games?310:280),275,games?292:270,focus==offset+i);
             }
-            Label(r,games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Options   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
+            Label(r,all_entries?"Y Clear search   X Edit search   B Home   A Open":games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Options   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
             if(static_cast<int>(list.size())>capacity)Label(r,std::to_string(offset/capacity+1)+"/"+std::to_string((list.size()+capacity-1)/capacity),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
@@ -1636,6 +1662,7 @@ namespace ul::menu::ui {
                 Label(r,c.label,c.x+25,c.y+12,37,c.w-50);
                 Label(r,c.detail,c.x+25,c.y+(settings?51:65),27,c.w-50);
                 if(settings && setting_section==0 && i<2) {
+                    if(focus==static_cast<int>(i))Label(r,"Left / Right",c.x+1010,c.y+8,27,290);
                     const int x=c.x+750,y=c.y+42,w=530;
                     const float value=(i==0?glass:blur)/100.f;
                     r->RenderRoundedRectangleFill({30,38,75,110},x,y,w,12,6);
