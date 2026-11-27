@@ -790,7 +790,7 @@ namespace ul::menu::ui {
         this->quick_menu = QuickMenu::New();
         this->Add(this->quick_menu);
         this->SetGlassMode(true);
-        UL_LOG_INFO("GlassNX v0.22: custom HOME layout created and selected");
+        UL_LOG_INFO("GlassNX v0.23: custom HOME layout created and selected");
 
         this->startup_tp = std::chrono::steady_clock::now();
         UL_LOG_INFO("MainMenuLayout created in %lld ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - time).count());
