@@ -67,7 +67,10 @@ namespace ul::menu::ui {
                         r->RenderRoundedRectangleFill({245,248,255,245},x+154,y+103,12,70,6);
                     }
                     if(profile.name)profile.name->OnRender(r,x+160-profile.name->GetWidth()/2,y+264);
-                    if(active)r->RenderRoundedRectangleFill({228,236,255,205},x+125,y+319,70,7,3);
+                    if(active){
+                        r->RenderRoundedRectangleFill({228,236,255,205},x+125,y+319,70,7,3);
+                        r->RenderCircle({245,249,255,185},x+160,y+138,108);
+                    }
                 }
                 const int pages=(int(profiles.size())+PerPage-1)/PerPage;
                 for(int i=0;i<pages;++i)r->RenderCircleFill({239,245,255,static_cast<u8>(i==selected/PerPage?240:90)},960-(pages-1)*15+i*30,762,6);
@@ -108,14 +111,14 @@ namespace ul::menu::ui {
         title->SetColor({255,255,255,255});
         title->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
         this->Add(title);
-        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "Choose your profile");
+        this->info_text = pu::ui::elm::TextBlock::New(0, 0, "Welcome. Choose your profile.");
         this->info_text->SetColor(g_MenuApplication->GetTextColor());
         g_GlobalSettings.ApplyConfigForElement("startup_menu", "info_text", this->info_text);
         this->Add(this->info_text);
 
         this->profile_cards=std::make_shared<ProfileCards>();
         this->Add(this->profile_cards);
-        auto hint=pu::ui::elm::TextBlock::New(0,855,"Left / Right   Choose profile      A   Continue");
+        auto hint=pu::ui::elm::TextBlock::New(0,855,"Left / Right   Choose     A   Continue     L / R   Page");
         hint->SetFont(pu::ui::MakeDefaultFontName(30));
         hint->SetColor({235,242,255,255});hint->SetHorizontalAlign(pu::ui::elm::HorizontalAlign::Center);
         this->Add(hint);
