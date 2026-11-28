@@ -1,17 +1,20 @@
 
 #pragma once
 #include <ul/menu/ui/ui_IMenuLayout.hpp>
+#include <ul/menu/ui/ui_GlassSystemPanel.hpp>
 
 namespace ul::menu::ui {
 
     class LockscreenMenuLayout : public IMenuLayout {
         private:
-            bool touch_latched=true;
+            bool touch_latched=true,hide_previews=false;
+            GlassSystemWallpaper::Ref prism_wallpaper;
+            pu::sdl2::TextureHandle::Ref custom_wallpaper;
             pu::ui::elm::TextBlock::Ref info_text;
             pu::ui::elm::TextBlock::Ref notification_text;
             pu::ui::elm::TextBlock::Ref notification_heading;
             pu::ui::elm::TextBlock::Ref older_notification;
-            pu::ui::elm::Image::Ref older_panel;
+            GlassSystemPanel::Ref older_panel;
             pu::ui::elm::Image::Ref connection_top_icon;
             MultiTextBlock::Ref time_mtext;
             pu::ui::elm::TextBlock::Ref date_text;
@@ -23,6 +26,8 @@ namespace ul::menu::ui {
             LockscreenMenuLayout();
             PU_SMART_CTOR(LockscreenMenuLayout)
             
+            void Enter(const pu::sdl2::TextureHandle::Ref &wallpaper);
+            void Leave(){prism_wallpaper->SetWallpaper({});}
             void OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) override;
             bool OnHomeButtonPress() override;
             void LoadSfx() override;
