@@ -296,7 +296,7 @@ namespace ul::menu::ui {
     }
 
     void ShowAboutDialog() {
-        g_MenuApplication->DisplayDialog("GlassNX v0.23", "Native Liquid Glass HOME replacement. Based on XorTroll's uLaunch.\nhttps://github.com/gavin02031/uLaunch/tree/glassnx", { GetLanguageString("ok") }, true);
+        g_MenuApplication->DisplayDialog("GlassNX v0.24", "Native Liquid Glass HOME replacement. Based on XorTroll's uLaunch.\nhttps://github.com/gavin02031/uLaunch/tree/glassnx", { GetLanguageString("ok") }, true);
     }
 
     void ShowSettingsMenu() {
