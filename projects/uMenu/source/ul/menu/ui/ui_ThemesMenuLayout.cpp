@@ -10,6 +10,8 @@ extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
 namespace ul::menu::ui {
 
     ThemesMenuLayout::ThemesMenuLayout() : IMenuLayout() {
+        this->prism_wallpaper=GlassSystemWallpaper::New();
+        this->Add(this->prism_wallpaper);
         auto brand=pu::ui::elm::TextBlock::New(70,38,"Theme studio");
         brand->SetFont(pu::ui::MakeDefaultFontName(45));brand->SetColor({238,244,255,225});this->Add(brand);
         this->Add(GlassSystemPanel::New(1600,24,250,82));
