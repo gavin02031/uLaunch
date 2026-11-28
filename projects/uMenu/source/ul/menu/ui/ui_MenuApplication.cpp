@@ -283,6 +283,7 @@ namespace ul::menu::ui {
         this->EnsureLayoutCreated(type);
         if(type!=MenuType::Settings&&this->settings_menu_lyt)this->settings_menu_lyt->SetPrismWallpaper({});
         if(type!=MenuType::Themes&&this->themes_menu_lyt)this->themes_menu_lyt->SetPrismWallpaper({});
+        if(type!=MenuType::Lockscreen&&this->lockscreen_menu_lyt)this->lockscreen_menu_lyt->Leave();
         
         switch(type) {
             case MenuType::Startup: {
@@ -309,6 +310,7 @@ namespace ul::menu::ui {
                 break;
             }
             case MenuType::Lockscreen: {
+                this->lockscreen_menu_lyt->Enter(this->main_menu_lyt?this->main_menu_lyt->AppearanceWallpaper():GetBackgroundTexture());
                 this->LoadLayout(this->lockscreen_menu_lyt);
                 break;
             }
