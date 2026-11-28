@@ -48,6 +48,16 @@ namespace ul::menu::ui {
         void LoadCategories();
         bool SaveCategories();
         void TitleOptions();
+        // Native Game Hub and collection overview; never retain raw entry pointers.
+        int hub_mode=0,hub_focus=0;
+        u64 hub_id=0;
+        void OpenProfileOverview();
+        void CloseHub();
+        void HubInput(u64 down,pu::ui::TouchPoint touch);
+        void RenderHub(Renderer &r);
+        void HubAction(int action);
+        int HubEntry();
+        void SetHubCategory(int category);
         bool SetArtworkKey();
         void EditArtwork(u64 id,const std::string &name);
         struct ArtworkGallery {
@@ -169,7 +179,7 @@ namespace ul::menu::ui {
         pu::sdl2::TextureHandle::Ref AppearanceWallpaper(){return ActiveWallpaper();}
         void RecordLaunch(u64 id);
         void PrepareTransition();
-        void Invalidate() {CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;}
+        void Invalidate() {CloseHub();CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;focus=0;offset=0;animated_focus=-1;alert_offset=0;texts.clear();hits.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;}
         void HandleInput(u64 down, pu::ui::TouchPoint touch);
         void OnRender(Renderer &r,const s32 x,const s32 y) override;
         void OnInput(const u64,const u64,const u64,const pu::ui::TouchPoint) override {}
