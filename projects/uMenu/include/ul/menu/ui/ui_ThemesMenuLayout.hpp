@@ -1,6 +1,7 @@
 
 #pragma once
 #include <ul/menu/ui/ui_IMenuLayout.hpp>
+#include <ul/menu/ui/ui_GlassSystemPanel.hpp>
 #include <ul/cfg/cfg_Config.hpp>
 
 namespace ul::menu::ui {
@@ -12,6 +13,7 @@ namespace ul::menu::ui {
             static constexpr u32 ThemesMenuItemsToShow = 5;
 
         private:
+            GlassSystemWallpaper::Ref prism_wallpaper;
             pu::ui::elm::Menu::Ref themes_menu;
             pu::ui::elm::TextBlock::Ref info_text;
             std::vector<cfg::Theme> loaded_themes;
@@ -26,6 +28,7 @@ namespace ul::menu::ui {
             ThemesMenuLayout();
             PU_SMART_CTOR(ThemesMenuLayout)
 
+            void SetPrismWallpaper(const pu::sdl2::TextureHandle::Ref &value){prism_wallpaper->SetWallpaper(value);}
             void OnMenuInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) override;
             bool OnHomeButtonPress() override;
             void LoadSfx() override;
