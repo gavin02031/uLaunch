@@ -1113,6 +1113,14 @@ namespace ul::menu::ui {
         else if(key=="ZLZR"){shoulder("ZL");shoulder("ZR");}
         else if(key=="L"||key=="R"||key=="ZL"||key=="ZR")shoulder(key);
         else if(key=="LS"||key=="RS")face(key=="LS"?"L":"R",true);
+        else if(key=="+"||key=="-"){
+            const int cx=x+19,cy=y+19;
+            r->RenderRoundedRectangleFill({10,18,36,100},cx-16,cy-4,32,12,3);
+            if(key=="+")r->RenderRoundedRectangleFill({10,18,36,100},cx-6,cy-14,12,32,3);
+            r->RenderRoundedRectangleFill(white,cx-16,cy-6,32,12,3);
+            if(key=="+")r->RenderRoundedRectangleFill(white,cx-6,cy-16,12,32,3);
+            used=40;
+        }
         else if(key=="D"||key=="UD"||key=="LRD"||key=="DOWN"||key=="UP"){
             const int cx=x+20,cy=y+19;
             // Cross-shaped directional pad; only relevant arms are bright.
