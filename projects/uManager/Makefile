@@ -47,7 +47,7 @@ ROMFS		:=	romfs
 APP_TITLE   := GlassNX Manager
 APP_AUTHOR  := GlassNX (based on uLaunch)
 
-APP_VERSION := 0.25
+APP_VERSION := 0.26
 
 #---------------------------------------------------------------------------------
 # options for code generation
