@@ -72,3 +72,50 @@ jobs:
       run: |
         g++ -std=c++17 -Wall -Wextra -Werror -Ilibs/uCommon/include tests/artwork.cpp $(pkg-config --cflags --libs sdl2 SDL2_image) -o /tmp/glassnx-artwork-test
         /tmp/glassnx-artwork-test
+
+  publish-release:
+    # Publish only from the GlassNX branch, after both native and host checks pass.
+    if: github.repository == 'gavin02031/uLaunch' && github.ref == 'refs/heads/glassnx' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [uLaunch, material-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: glassnx-release
+      cancel-in-progress: false
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: GlassNX-v*
+        path: release-package
+        merge-multiple: true
+    - name: Publish verified direct ZIP
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        packages=(release-package/GlassNX-v*.zip)
+        [[ ${#packages[@]} -eq 1 ]]
+        package="${packages[0]}"
+        filename="$(basename "$package")"
+        [[ "$filename" =~ ^GlassNX-v[0-9]+\.[0-9]+(\.[0-9]+)?\.zip$ ]]
+        tag="${filename%.zip}"
+        unzip -t "$package"
+        unzip -p "$package" glassnx/BUILD.txt | grep -Fx "Commit: $GITHUB_SHA"
+        # Never silently replace an existing version or move its tag.
+        if gh release view "$tag" --json tagName,assets > existing-release.json 2>/dev/null; then
+          echo "Release $tag already exists; leaving it unchanged."
+          exit 0
+        fi
+        # A tag may already exist after a failed publish; verify its commit.
+        if existing=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null); then
+          [[ "$existing" == "$GITHUB_SHA" ]] || { echo "Existing tag points at another commit"; exit 1; }
+        else
+          gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA" >/dev/null
+        fi
+        sha256sum "$package" | sed 's|release-package/||' > "$package.sha256"
+        printf '%s\n' "GlassNX development build from $GITHUB_SHA." "" "Native compilation, archive validation and host smoke tests passed. Switch hardware validation is still required." "" "Download $filename directly (not Source code). For an existing compatible GlassNX installation, transfer it intact to /glassnx/update.zip and use GlassNX Manager. Keep an SD backup." > release-notes.txt
+        gh release create "$tag" "$package" "$package.sha256" --verify-tag --title "$tag" --notes-file release-notes.txt --prerelease
