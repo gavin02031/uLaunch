@@ -49,7 +49,8 @@ namespace ul::menu::ui {
         bool SaveCategories();
         void TitleOptions();
         // Native Game Hub and collection overview; never retain raw entry pointers.
-        int hub_mode=0,hub_focus=0;
+        int hub_mode=0,hub_focus=0,power_pending=0;
+        void OpenPowerSheet();
         u64 hub_id=0;
         void OpenProfileOverview();
         void CloseHub();
