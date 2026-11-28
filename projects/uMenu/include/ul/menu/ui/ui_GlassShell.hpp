@@ -136,6 +136,7 @@ namespace ul::menu::ui {
         bool touched = false;
         bool icon_budget = true;
         bool safe_mode = false;
+        bool hide_lockscreen_previews=false;
         bool enhanced_glass = false;
         LiquidGlass liquid_glass;
         void ToggleEnhancedGlass();
