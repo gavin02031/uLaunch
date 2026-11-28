@@ -451,7 +451,7 @@ namespace ul::menu::ui {
             Label(r,"Remove saved alerts",155,445,45,855);
             Label(r,"This clears the notification history.",155,535,37,855);
             Label(r,"New system alerts will still appear.",155,605,30,855);
-            Label(r,"A Select   B Cancel",155,925,27,900);
+            Hint(r,155,925,180,"A","Select");Hint(r,350,925,220,"B","Cancel");
             row(0,"Keep alerts","Return without deleting anything");
             row(1,"Clear history","Remove all saved alerts");
             return;
@@ -468,6 +468,7 @@ namespace ul::menu::ui {
             row(1,"Favorites","Browse your saved games");
             row(2,"Recently played","Browse recorded launch history");
             row(3,"Back","Return to your previous screen");
+            Hint(r,155,925,180,"A","Select");Hint(r,350,925,180,"B","Back");Hint(r,545,925,240,"D","Navigate");
             return;
         }
         const int idx=HubEntry();
@@ -490,7 +491,7 @@ namespace ul::menu::ui {
         const int value=category==title_categories.end()?0:category->second;
         const std::string category_name=value==1?"Game":value==2?"App":"Automatic";
         Label(r,"Category  /  "+category_name,155,825,30,855);
-        Label(r,"A Select   B Back   D-pad Navigate",155,925,27,900);
+        Hint(r,155,925,180,"A","Select");Hint(r,350,925,180,"B","Back");Hint(r,545,925,240,"D","Navigate");
         if(hub_mode==3){
             row(0,"Automatic",value==0?"Current category":"Use detected title type");
             row(1,"Game",value==1?"Current category":"Show in game library");
@@ -690,7 +691,7 @@ namespace ul::menu::ui {
         ul::glassnx::DrawSurface(r,135,175,1650,805,48,{19,30,56,235});
         Glyph(r,"search",178,209,42);Label(r,page==Page::Home||filter==4?"Search games & apps":"Search your library",238,201,45,950);
         Button(r,1180,192,235,74,keyboard_symbols?"ABC":"Symbols",false,[this](){keyboard_symbols=!keyboard_symbols;});
-        Label(r,"B  Cancel",1490,218,30,260);
+        Hint(r,1490,209,245,"B","Cancel");
         hits.push_back({1450,188,300,84,[this](){FinishKeyboard(false);}});
         ul::glassnx::DrawSurface(r,175,278,1570,105,32,{13,23,48,200});
         Label(r,keyboard_draft.empty()?"Type a game or app name":keyboard_draft+" |",205,309,37,1370);
@@ -714,7 +715,9 @@ namespace ul::menu::ui {
             Label(r,key,x+w/2,y+19,37,w-14,true);
             hits.push_back({x,y,w,78,[this,i](){KeyboardKey(i);}});
         }
-        Label(r,"A Type   Y Delete   L Shift   R Symbols   + Search   X System keyboard",960,900,27,1510,true);
+        Hint(r,230,900,150,"A","Type");Hint(r,390,900,180,"Y","Delete");
+        Hint(r,580,900,150,"L","Shift");Hint(r,740,900,205,"R","Symbols");
+        Hint(r,960,900,180,"+","Search");Hint(r,1150,900,430,"X","System keyboard");
     }
     void GlassShell::OpenCloseSheet(){
         if(!g_GlobalSettings.IsSuspended())return;
@@ -749,7 +752,7 @@ namespace ul::menu::ui {
         ul::glassnx::DrawSurface(r,980,650,420,95,40,{166,66,100,static_cast<u8>(close_focus==1?240:180)},close_focus==1);
         Label(r,"Close game",1190,677,37,390,true);
         hits.push_back({980,650,420,95,[this](){FinishCloseSheet(true);}});
-        Label(r,"B  Cancel     A  Confirm selection",960,770,27,850,true);
+        Hint(r,650,762,210,"B","Cancel");Hint(r,880,762,430,"A","Confirm selection");
     }
     void GlassShell::ActivateDock(int index){
         dock_focus=-1;
@@ -993,7 +996,7 @@ namespace ul::menu::ui {
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float u=float(px)/tw;
             const float angle=.20f+.80f*(1-v)*(1-v);
-            const float lower=std::max(0.f,(v-.70f)/.30f)*(0.25f+0.75f*u);
+            const float lower=std::max(0.f,(v-.70f)/.30f)*(0.26f+0.75f*u);
             const float edge_shadow=std::max(0.f,1.f-std::abs(d+2.f)/3.f)*lower;
             const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
             const float shine=(1.f-v)*.052f+reflection*.095f+rim*(selected?.78f:.61f)*angle+light*.065f+rim*lower*.20f;
@@ -1047,15 +1050,15 @@ namespace ul::menu::ui {
             r->RenderRoundedRectangle({237,243,255,205},x,y,w,h,radius);
         }
     }
-    void GlassShell::Label(Renderer &r,const std::string &s,int x,int y,int size,int maxw,bool center) {
+    void GlassShell::Label(Renderer &r,const std::string &s,int x,int y,int size,int maxw,bool center,bool dark) {
         if(s.empty())return;
-        const auto key=std::to_string(size)+"/"+std::to_string(maxw)+"/"+s;
+        const auto key=std::to_string(size)+"/"+std::to_string(maxw)+(dark?"/dark/":"/light/")+s;
         auto it=texts.find(key);
         if(it==texts.end()) {
             if(texts.size()>=160) texts.erase(texts.begin());
             auto t=pu::ui::elm::TextBlock::New(0,0,s);
             t->SetFont(pu::ui::MakeDefaultFontName(size));
-            t->SetColor(size<30?pu::ui::Color{231,238,255,235}:pu::ui::Color{255,255,255,255});
+            t->SetColor(dark?pu::ui::Color{24,36,57,255}:size<30?pu::ui::Color{231,238,255,235}:pu::ui::Color{255,255,255,255});
             // Fit once when caching rather than letting long titles marquee
             // into an arbitrary cropped middle. Preserve UTF-8 boundaries.
             if(maxw>0 && t->GetWidth()>maxw) {
@@ -1086,9 +1089,51 @@ namespace ul::menu::ui {
         const auto &t=it->second;
         t->OnRender(r,center?x-t->GetWidth()/2:x,y);
     }
+    // Physical input silhouettes: bright controller hardware, dark legends,
+    // separate action text. No hit regions or textures are allocated here.
+    void GlassShell::Hint(Renderer &r,int x,int y,int w,const std::string &key,const std::string &action){
+        const pu::ui::Color white{247,249,255,255},ink{35,48,73,255},muted{142,155,177,255};
+        int used=0;
+        auto face=[&](const std::string &legend,bool stick){
+            const int cx=x+used+19,cy=y+19;
+            r->RenderCircleFill({10,18,36,100},cx,cy+2,18);
+            r->RenderCircleFill(white,cx,cy,18);
+            if(stick)r->RenderCircle(ink,cx,cy,15);
+            Label(r,legend,cx,y+3,27,34,true,true);
+            used+=40;
+        };
+        auto shoulder=[&](const std::string &legend){
+            const int width=legend.size()==2?51:38;
+            r->RenderRoundedRectangleFill({10,18,36,100},x+used,y+5,width,32,8);
+            r->RenderRoundedRectangleFill(white,x+used,y+2,width,32,8);
+            Label(r,legend,x+used+width/2,y+2,27,width-4,true,true);
+            used+=width+5;
+        };
+        if(key=="LR"){shoulder("L");shoulder("R");}
+        else if(key=="ZLZR"){shoulder("ZL");shoulder("ZR");}
+        else if(key=="L"||key=="R"||key=="ZL"||key=="ZR")shoulder(key);
+        else if(key=="LS"||key=="RS")face(key=="LS"?"L":"R",true);
+        else if(key=="D"||key=="UD"||key=="LRD"||key=="DOWN"||key=="UP"){
+            const int cx=x+20,cy=y+19;
+            // Cross-shaped directional pad; only relevant arms are bright.
+            r->RenderRoundedRectangleFill(muted,cx-7,cy-19,14,38,3);
+            r->RenderRoundedRectangleFill(muted,cx-19,cy-7,38,14,3);
+            if(key=="D"||key=="UD"||key=="UP")r->RenderRoundedRectangleFill(white,cx-7,cy-19,14,15,3);
+            if(key=="D"||key=="UD"||key=="DOWN")r->RenderRoundedRectangleFill(white,cx-7,cy+4,14,15,3);
+            if(key=="D"||key=="LRD"){
+                r->RenderRoundedRectangleFill(white,cx-19,cy-7,15,14,3);
+                r->RenderRoundedRectangleFill(white,cx+4,cy-7,15,14,3);
+            }
+            r->RenderRoundedRectangleFill(ink,cx-5,cy-5,10,10,3);
+            used=42;
+        }else face(key,false);
+        if(!action.empty()&&w>used+8)Label(r,action,x+used+6,y+3,27,w-used-6);
+    }
     void GlassShell::Button(Renderer &r,int x,int y,int w,int h,const std::string &s,bool selected,std::function<void()> cb) {
         ul::glassnx::DrawSurface(r,x,y,w,h,h/2,selected?pu::ui::Color{151,171,234,150}:pu::ui::Color{29,32,79,62},selected);
-        Label(r,s,x+w/2,y+(h-37)/2,30,w-24,true);
+        if(s.size()>3 && s[1]==' ' && s[2]==' ' && std::string("ABXYLR+-").find(s[0])!=std::string::npos)
+            Hint(r,x+20,y+(h-38)/2,w-40,s.substr(0,1),s.substr(3));
+        else Label(r,s,x+w/2,y+(h-37)/2,30,w-24,true);
         hits.push_back({x,y,w,h,cb});
     }
     pu::sdl2::TextureHandle::Ref GlassShell::SystemSymbol(const std::string &kind,bool tile){
@@ -1405,7 +1450,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.25",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.26",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1695,7 +1740,7 @@ namespace ul::menu::ui {
                 Button(r,112,445,250,78,suspended?"Resume":"Play",true,[this,idx](){launch(idx);});
                 if(suspended) {
                     ul::glassnx::DrawSurface(r,380,445,300,78,38,{144,62,96,180});
-                    Label(r,"X  Close game",530,467,30,270,true);
+                    Hint(r,400,465,260,"X","Close game");
                     hits.push_back({380,445,300,78,[this](){OpenCloseSheet();}});
                 } else Button(r,380,445,300,78,"Game Hub",false,[this](){TitleOptions();});
             } else {
@@ -1704,10 +1749,13 @@ namespace ul::menu::ui {
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Game shelf",75,600,37);
-            Label(r,dock_focus>=0?"A Open  ·  Up / B Back":"R Stick Hub   ·   Down Dock",385,606,27,570);
-            IconButton(r,1000,590,240,52,"search","Y Search",false,[this](){dock_focus=-1;Search();});
+            if(dock_focus>=0){Hint(r,385,599,160,"A","Open");Hint(r,555,599,190,"UP","Games");Hint(r,755,599,180,"B","Back");}
+            else {Hint(r,385,599,260,"RS","Game Hub");Hint(r,660,599,200,"DOWN","Dock");}
+            ul::glassnx::DrawSurface(r,1000,590,240,52,24,{29,32,79,62});
+            Hint(r,1012,597,215,"Y","Search");
+            hits.push_back({1000,590,240,52,[this](){dock_focus=-1;Search();}});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
-            Label(r,g_GlobalSettings.IsSuspended()?"X  Close game":"X  Profile",1260,606,27,300);
+            Hint(r,1260,599,300,"X",g_GlobalSettings.IsSuspended()?"Close game":"Profile");
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,250,dock_focus<0&&focus==offset+i);
             const int pages=int((list.size()+4)/5);
             if(pages>9){
@@ -1749,7 +1797,11 @@ namespace ul::menu::ui {
                 const int columns=games?5:6;
                 Tile(r,list[offset+i],(games?400:88)+(i%columns)*(games?290:293),(games?320:389)+(i/columns)*(games?310:280),275,games?292:270,focus==offset+i);
             }
-            Label(r,all_entries?"Y Clear search   X Edit search   B Home   A Open":games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Hub   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
+            if(all_entries){Hint(r,70,1000,290,"Y","Clear search");Hint(r,380,1000,280,"X","Edit search");Hint(r,680,1000,220,"B","Home");Hint(r,920,1000,200,"A","Open");}
+            else {Hint(r,70,1000,240,"LR","Pages");Hint(r,320,1000,190,"Y","Filter");Hint(r,520,1000,190,"X","Search");
+                if(games){Hint(r,720,1000,240,"LS","Favorite");Hint(r,980,1000,240,"RS","Game Hub");Hint(r,1240,1000,200,"A","Open");}
+                else {Hint(r,720,1000,240,"RS","Game Hub");Hint(r,980,1000,200,"A","Open");}
+            }
             if(static_cast<int>(list.size())>capacity)Label(r,std::to_string(offset/capacity+1)+"/"+std::to_string((list.size()+capacity-1)/capacity),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
@@ -1757,14 +1809,14 @@ namespace ul::menu::ui {
             if(!settings&&!control){
                 const bool quiet=g_MenuApplication->IsQuietMode();
                 IconButton(r,1420,140,400,76,"moon",quiet?"Quiet on":"Quiet off",quiet,[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());});
-                Label(r,"Y  Toggle quiet mode",1430,218,27,385);
+                Hint(r,1430,211,385,"Y","Toggle quiet mode");
             }
             if(settings) {
                 Card(r,70,210,360,760);
                 const char *sections[]={"Appearance","System","Controls","Network","Power","Storage","Homebrew","About"};
                 const char *icons[]={"settings","settings","games","wifi","power","storage","apps","bell"};
                 for(int i=0;i<8;i++)Segment(r,90,240+i*81,320,70,icons[i],sections[i],setting_section==i,[this,i](){Section(i);});
-                Label(r,"Y  Categories",95,895,27);
+                Hint(r,95,890,290,"Y","Categories");
                 Label(r,sections[setting_section],466,205,45);
                 if(setting_section==0) {
                     Label(r,"Theme",466,265,30);
@@ -1842,7 +1894,7 @@ namespace ul::menu::ui {
                 Label(r,c.label,c.x+25,c.y+12,37,c.w-50);
                 Label(r,c.detail,c.x+25,c.y+(settings?51:65),27,c.w-50);
                 if(settings && setting_section==0 && i<2) {
-                    if(focus==static_cast<int>(i))Label(r,"Left / Right",c.x+1010,c.y+8,27,290);
+                    if(focus==static_cast<int>(i))Hint(r,c.x+1010,c.y+5,290,"LRD","Adjust");
                     const int x=c.x+750,y=c.y+42,w=530;
                     const float value=(i==0?glass:blur)/100.f;
                     r->RenderRoundedRectangleFill({30,38,75,110},x,y,w,12,6);
@@ -1855,7 +1907,13 @@ namespace ul::menu::ui {
                 }
                 hits.push_back({c.x,c.y,c.w,c.h,[this,i,action=c.action](){focus=static_cast<int>(i);action();}});
             }
-            Label(r,control?"A Select   Left / Right Adjust slider   Up / Down Navigate   B Back":"A Select   B Back   ZL/ZR Quick controls   + Activity",70,1005,27,1770);
+            Hint(r,70,1000,190,"A","Select");
+            if(control){
+                Hint(r,275,1000,355,"LRD",focus<2?"Adjust slider":"Navigate");
+                Hint(r,650,1000,290,"UD","Navigate");Hint(r,960,1000,200,"B","Back");
+            }else{
+                Hint(r,275,1000,190,"B","Back");Hint(r,485,1000,410,"ZLZR","Quick controls");Hint(r,915,1000,270,"+","Activity");
+            }
         }
         if(close_sheet){RenderCloseSheet(r);return;}
         if(keyboard_open){RenderKeyboard(r);return;}
