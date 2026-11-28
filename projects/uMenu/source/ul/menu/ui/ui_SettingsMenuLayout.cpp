@@ -6,6 +6,7 @@
 #include <ul/acc/acc_Accounts.hpp>
 #include <ul/util/util_Scope.hpp>
 #include <malloc.h>
+#include <ul/glassnx/Brand.hpp>
 
 extern ul::menu::ui::GlobalSettings g_GlobalSettings;
 extern ul::menu::ui::MenuApplication::Ref g_MenuApplication;
@@ -427,7 +428,7 @@ namespace ul::menu::ui {
                 .setting = Setting::ConsoleFirmware,
                 .editable = false,
                 .static_description = GetLanguageString("set_console_fw"),
-                .static_value = std::string(g_GlobalSettings.fw_version.display_version) + " (" + g_GlobalSettings.fw_version.display_title + ")"
+                .static_value = std::string(g_GlobalSettings.fw_version.display_version)
             });
 
             g_SettingMenuEntries.push_back({
@@ -705,8 +706,8 @@ namespace ul::menu::ui {
                 .menu = SettingMenu::uLaunch,
                 .setting = Setting::uLaunchVersion,
                 .editable = false,
-                .static_description = GetLanguageString("set_ul_version"),
-                .static_value = UL_VERSION
+                .static_description = "GlassNX version",
+                .static_value = ul::glassnx::Version
             });
 
             g_SettingMenuEntries.push_back({
@@ -888,6 +889,8 @@ namespace ul::menu::ui {
         this->setting_save_sfx = nullptr;
         this->back_sfx = nullptr;
 
+        this->prism_wallpaper=GlassSystemWallpaper::New();
+        this->Add(this->prism_wallpaper);
         auto brand=pu::ui::elm::TextBlock::New(70,45,"System settings");
         brand->SetFont(pu::ui::MakeDefaultFontName(45));
         brand->SetColor({238,244,255,225});this->Add(brand);
