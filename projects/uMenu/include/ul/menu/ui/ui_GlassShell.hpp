@@ -164,7 +164,8 @@ namespace ul::menu::ui {
         void Activate();
         void Move(int amount);
         void Card(Renderer &r, int x,int y,int w,int h,bool selected=false);
-        void Label(Renderer &r, const std::string &s,int x,int y,int size=30,int maxw=0,bool center=false);
+        void Label(Renderer &r, const std::string &s,int x,int y,int size=30,int maxw=0,bool center=false,bool dark=false);
+        void Hint(Renderer &r,int x,int y,int w,const std::string &key,const std::string &action);
         void Picture(Renderer &r, const pu::sdl2::TextureHandle::Ref &t,int x,int y,int w,int h);
         void Tile(Renderer &r,u32 index,int x,int y,int w,int h,bool selected);
         void Button(Renderer &r,int x,int y,int w,int h,const std::string &label,bool selected,std::function<void()> cb);
