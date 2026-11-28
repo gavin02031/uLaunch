@@ -381,10 +381,15 @@ namespace ul::menu::ui {
         g_MenuApplication->ShowNotification("Library category saved");
     }
     void GlassShell::HubAction(int action){
+        if(hub_mode==4){
+            CloseHub();
+            if(action==1){g_MenuApplication->ClearNotificationHistory();alert_offset=0;}
+            return;
+        }
         if(hub_mode==2){
             if(action==0){CloseHub();ShowUserPage();}
-            else if(action==1){CloseHub();SetPage(Page::Library);filter=1;focus=offset=0;}
-            else if(action==2){CloseHub();SetPage(Page::Library);filter=3;focus=offset=0;}
+            else if(action==1){CloseHub();SetPage(Page::Library);filter=1;search.clear();focus=offset=0;}
+            else if(action==2){CloseHub();SetPage(Page::Library);filter=3;search.clear();focus=offset=0;}
             else CloseHub();
             return;
         }
@@ -423,7 +428,7 @@ namespace ul::menu::ui {
                 auto cb=hit.action;cb();return;
             }
         }
-        const int last=hub_mode==1?4:3;
+        const int last=hub_mode==1?4:hub_mode==4?1:3;
         if(down&(HidNpadButton_Up|HidNpadButton_StickLUp|HidNpadButton_Left|HidNpadButton_StickLLeft))hub_focus=std::max(0,hub_focus-1);
         else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown|HidNpadButton_Right|HidNpadButton_StickLRight))hub_focus=std::min(last,hub_focus+1);
         else if(down&HidNpadButton_A)HubAction(hub_focus);
@@ -440,6 +445,17 @@ namespace ul::menu::ui {
             hits.push_back({x,y,w,h,[this,i](){hub_focus=i;HubAction(i);}});
         };
         Button(r,1490,112,275,82,"B  Back",false,[this](){if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}else CloseHub();});
+        if(hub_mode==4){
+            Label(r,"Clear Activity?",155,123,64,1200);
+            Glyph(r,"bell",175,290,120);
+            Label(r,"Remove saved alerts",155,445,45,855);
+            Label(r,"This clears the notification history.",155,535,37,855);
+            Label(r,"New system alerts will still appear.",155,605,30,855);
+            Label(r,"A Select   B Cancel",155,925,27,900);
+            row(0,"Keep alerts","Return without deleting anything");
+            row(1,"Clear history","Remove all saved alerts");
+            return;
+        }
         if(hub_mode==2){
             Label(r,"Your collection",155,123,64,1200);
             RoundedArt(r,GetSelectedUserIconTexture(),180,260,230,230,114);
@@ -1418,8 +1434,7 @@ namespace ul::menu::ui {
                {1310,630,510,100,"System settings","",[](){ShowSettingsMenu();}}};
         } else if(page==Page::Notifications) {
             c={{430,905,510,90,"Clear alerts","",[this](){
-                   const auto result=g_MenuApplication->DisplayDialog("Clear notifications?","Remove all saved GlassNX alerts.",{"Clear","Cancel"},true);
-                   if(result==0){g_MenuApplication->ClearNotificationHistory();alert_offset=0;}
+                   hub_mode=4;hub_focus=0;hub_id=0;hits.clear();touched=true;
                }},
                {980,905,510,90,"Back","",[this](){Back();}}};
         }
