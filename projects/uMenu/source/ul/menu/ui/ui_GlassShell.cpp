@@ -546,10 +546,9 @@ namespace ul::menu::ui {
     }
     void GlassShell::RenderKeyboard(Renderer &r){
         hits.clear();
-        r->RenderRectangleFill({9,16,38,110},0,0,1920,1080);
-        Card(r,115,155,1690,845);
+        r->RenderRectangleFill({9,16,38,155},0,0,1920,1080);
         // Legible under all four wallpapers, independent of experimental GPU targets.
-        ul::glassnx::DrawSurface(r,135,175,1650,805,48,{19,30,56,178});
+        ul::glassnx::DrawSurface(r,135,175,1650,805,48,{19,30,56,235});
         Glyph(r,"search",178,209,42);Label(r,page==Page::Home||filter==4?"Search games & apps":"Search your library",238,201,45,950);
         Button(r,1180,192,235,74,keyboard_symbols?"ABC":"Symbols",false,[this](){keyboard_symbols=!keyboard_symbols;});
         Label(r,"B  Cancel",1490,218,30,260);
@@ -563,10 +562,13 @@ namespace ul::menu::ui {
             const int y=410+(i/10)*91,w=action?300:142;
             const bool selected=i==key_focus;
             const bool active=i==40&&keyboard_shift;
-            const auto color=selected?pu::ui::Color{144,176,236,235}:active?pu::ui::Color{104,145,211,210}:i==44?pu::ui::Color{68,137,194,215}:pu::ui::Color{112,133,179,130};
+            const auto color=selected?pu::ui::Color{66,115,174,255}:active?pu::ui::Color{79,113,176,245}:i==44?pu::ui::Color{36,105,157,245}:pu::ui::Color{62,79,119,225};
             r->RenderRoundedRectangleFill(color,x,y,w,78,20);
             r->RenderRoundedRectangle({230,239,255,static_cast<u8>(selected?230:90)},x,y,w,78,20);
-            if(selected)r->RenderRoundedRectangle({246,250,255,110},x+3,y+3,w-6,72,17);
+            if(selected){
+                r->RenderRoundedRectangle({246,250,255,170},x+3,y+3,w-6,72,17);
+                r->RenderRoundedRectangleFill({226,241,255,245},x+w/2-16,y+68,32,4,1);
+            }
             std::string key;
             if(action)key=KeyboardActions[i-40];
             else {char ch=(keyboard_symbols?KeyboardSymbolRows:KeyboardRows)[i/10][i%10];if(keyboard_shift)ch=static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));key=std::string(1,ch);}
@@ -777,8 +779,12 @@ namespace ul::menu::ui {
             if(!needle.empty() && name.find(needle)==std::string::npos)continue;
             // Installed forwarders can be reported as applications by Horizon.
             // Keep known utilities out of the game shelf; never hide unknown titles.
+            auto utility_name=name;
+            // Some forwarders include a stylized accent or surrounding whitespace.
+            const auto first=utility_name.find_first_not_of(" \t\r\n");
+            if(first!=std::string::npos)utility_name=utility_name.substr(first,utility_name.find_last_not_of(" \t\r\n")-first+1);
             bool utility=e.Is<EntryType::Application>() &&
-                (name=="sphaira" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
+                (utility_name=="sphaira" || utility_name=="sphaíra" || utility_name=="sphaïra" || utility_name=="sphaîra" || utility_name=="sphaira menu" || name=="switchdrop" || name=="opennow" || name=="horizon" ||
                  name=="youtube tv" || name=="youtube" || name=="streamfin" || name=="glassnx manager" || name=="umanager" || name=="hbmenu" || name=="homebrew menu");
             if(e.Is<EntryType::Application>()) {
                 const auto it=title_categories.find(e.app_info.app_id);
@@ -1260,7 +1266,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.23",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.24",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1502,11 +1508,17 @@ namespace ul::menu::ui {
             Label(r,temperature<0?"Temp unavailable":std::to_string(temperature)+" C",1530,241,30,275);
             Glyph(r,"storage",1298,392,32);Label(r,"Storage",1345,391,30);
             Label(r,StorageText(),1300,446,45,500);
-            if(total_bytes>0&&free_bytes>=0)Label(r,"SD card",1660,405,27,145);
+            if(total_bytes>0&&free_bytes>=0)Label(r,free_bytes<1073741824LL?"Low space":"SD card",1620,405,27,200);
             if(total_bytes>0 && free_bytes>=0) {
                 r->RenderRoundedRectangleFill({32,38,74,100},1300,520,500,17,8);
                 const auto used=std::clamp(1.0-double(free_bytes)/double(total_bytes),0.0,1.0);
-                if(used>0)r->RenderRoundedRectangleFill({235,240,255,225},1300,520,int(500*used),17,8);
+                const int width=int(500*used);
+                if(width>0){
+                    const int radius=std::min(7,width/2-1);
+                    const auto color=free_bytes<1073741824LL?pu::ui::Color{246,156,141,235}:pu::ui::Color{235,240,255,225};
+                    if(radius>0)r->RenderRoundedRectangleFill(color,1300,520,width,17,radius);
+                    else r->RenderRectangleFill(color,1300,520,width,17);
+                }
             }
             if(!list.empty()) {
                 const auto idx=list[focus];auto &e=entries->GetEntries()[idx];
@@ -1634,7 +1646,7 @@ namespace ul::menu::ui {
                 const bool suspended=g_GlobalSettings.IsSuspended();
                 Label(r,suspended?"Game suspended":"Shell active",1340,351,45,455);
                 Label(r,safe_mode?"Safe rendering":suspended?"Conservative rendering":enhanced_glass?(liquid_glass.IsReady()?"Enhanced glass (experimental)":"Enhanced glass requested"):"Standard Prism rendering",1340,422,30,455);
-                Label(r,"Clocks not managed by GlassNX",1340,490,27,455);
+                Label(r,"Clock control unavailable",1340,490,27,455);
                 Card(r,780,770,500,175);Label(r,"Battery",810,790,30);Label(r,Battery(),810,842,64);
                 Card(r,1310,770,510,175);Label(r,"Temperature",1340,790,30);Label(r,temperature<0?"Unavailable":std::to_string(temperature)+" C",1340,842,45);
                 Label(r,"Fan: unavailable",1340,909,27);
