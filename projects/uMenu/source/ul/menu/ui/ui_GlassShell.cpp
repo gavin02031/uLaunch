@@ -49,6 +49,7 @@ namespace ul::menu::ui {
         :entries(e),launch(l),legacy(old),folder_back(back),close_suspended(close) {LoadPreferences();LoadBackdrop();ReadRecent();LoadCategories();
         if(auto fp=fopen("sdmc:/glassnx/safe-mode","rb")){safe_mode=true;fclose(fp);}
         if(auto fp=fopen("sdmc:/glassnx/enhanced-glass","rb")){enhanced_glass=true;fclose(fp);}
+        hide_lockscreen_previews=ul::glassnx::HideLockscreenPreviews();
         last_conservative=Conservative();}
 
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
@@ -1463,8 +1464,9 @@ namespace ul::menu::ui {
                         row("Power center","Sleep, restart, shutdown",[this](){OpenPowerSheet();});
                         row("Control Center","Display and sound",[this](){SetPage(Page::Control);});
                         row("Lock screen","Lock now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);});
-                        row("Lock screen previews",ul::glassnx::HideLockscreenPreviews()?"Hidden":"Visible",[](){
-                            if(!ul::glassnx::SetHideLockscreenPreviews(!ul::glassnx::HideLockscreenPreviews()))g_MenuApplication->ShowNotification("Could not save lock screen preference");
+                        row("Lock screen previews",hide_lockscreen_previews?"Hidden":"Visible",[this](){
+                            if(ul::glassnx::SetHideLockscreenPreviews(!hide_lockscreen_previews))hide_lockscreen_previews=!hide_lockscreen_previews;
+                            else g_MenuApplication->ShowNotification("Could not save lock screen preference");
                         });break;
                     case 5:
                         row("SD card",StorageText(),noop);
