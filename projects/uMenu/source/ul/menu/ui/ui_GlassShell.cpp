@@ -2,6 +2,7 @@
 #include <ul/menu/ui/ui_ArtworkClient.hpp>
 #include <ul/glassnx/Artwork.hpp>
 #include <ul/glassnx/Surface.hpp>
+#include <ul/glassnx/LockscreenPrefs.hpp>
 #include <ul/menu/ui/ui_MenuApplication.hpp>
 #include <ul/menu/ui/ui_Common.hpp>
 #include <algorithm>
@@ -349,7 +350,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::CloseHub(){
         if(!hub_mode)return;
-        hub_mode=0;hub_focus=0;hub_id=0;hits.clear();touched=true;
+        hub_mode=0;hub_focus=0;hub_id=0;power_pending=0;hits.clear();touched=true;
     }
     void GlassShell::TitleOptions(){
         const auto list=List();
@@ -380,7 +381,23 @@ namespace ul::menu::ui {
         CloseHub();focus=offset=0;
         g_MenuApplication->ShowNotification("Library category saved");
     }
+    void GlassShell::OpenPowerSheet(){
+        hub_mode=5;hub_focus=0;hub_id=0;power_pending=0;hits.clear();touched=true;
+    }
     void GlassShell::HubAction(int action){
+        if(hub_mode==5){
+            if(action==0){CloseHub();return;}
+            if(action==1){CloseHub();SleepSystem();return;}
+            if(action==2||action==3){power_pending=action;hub_mode=6;hub_focus=0;hits.clear();touched=true;}
+            return;
+        }
+        if(hub_mode==6){
+            const int pending=power_pending;
+            if(action==0){OpenPowerSheet();return;}
+            CloseHub();
+            if(action==1){if(pending==2)RebootSystem();else if(pending==3)ShutdownSystem();}
+            return;
+        }
         if(hub_mode==4){
             CloseHub();
             if(action==1){g_MenuApplication->ClearNotificationHistory();alert_offset=0;}
@@ -418,6 +435,7 @@ namespace ul::menu::ui {
     void GlassShell::HubInput(u64 down,pu::ui::TouchPoint touch){
         if(down&HidNpadButton_B){
             if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}
+            else if(hub_mode==6)OpenPowerSheet();
             else CloseHub();
             return;
         }
@@ -428,7 +446,7 @@ namespace ul::menu::ui {
                 auto cb=hit.action;cb();return;
             }
         }
-        const int last=hub_mode==1?4:hub_mode==4?1:3;
+        const int last=hub_mode==1?4:(hub_mode==4||hub_mode==6)?1:3;
         if(down&(HidNpadButton_Up|HidNpadButton_StickLUp|HidNpadButton_Left|HidNpadButton_StickLLeft))hub_focus=std::max(0,hub_focus-1);
         else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown|HidNpadButton_Right|HidNpadButton_StickLRight))hub_focus=std::min(last,hub_focus+1);
         else if(down&HidNpadButton_A)HubAction(hub_focus);
@@ -444,7 +462,19 @@ namespace ul::menu::ui {
             Label(r,detail,x+28,y+61,27,w-60);
             hits.push_back({x,y,w,h,[this,i](){hub_focus=i;HubAction(i);}});
         };
-        Button(r,1490,112,275,82,"B  Back",false,[this](){if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}else CloseHub();});
+        Button(r,1490,112,275,82,"B  Back",false,[this](){if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}else if(hub_mode==6)OpenPowerSheet();else CloseHub();});
+        if(hub_mode==5||hub_mode==6){
+            const bool confirm=hub_mode==6,restart=power_pending==2;
+            Label(r,confirm?(restart?"Restart console?":"Power off console?"):"Power center",155,123,64,1200);
+            Glyph(r,"power",180,275,122);
+            Label(r,confirm?"Save your game first":"Your console, your choice",155,445,45,855);
+            Label(r,confirm?"Unsaved game progress may be lost.":"Sleep keeps your session available.",155,535,37,855);
+            Label(r,g_GlobalSettings.IsSuspended()?"A game is currently suspended.":"No game is currently suspended.",155,605,30,855);
+            Hint(r,155,925,180,"A","Select");Hint(r,350,925,180,"B","Back");Hint(r,545,925,240,"D","Navigate");
+            if(confirm){row(0,"Cancel","Return to Power center");row(1,restart?"Restart now":"Power off now","Confirm system action");}
+            else {row(0,"Back","Return without changing power state");row(1,"Sleep","Pause and resume your console");row(2,"Restart","Reboot the console");row(3,"Power off","Turn the console off");}
+            return;
+        }
         if(hub_mode==4){
             Label(r,"Clear Activity?",155,123,64,1200);
             Glyph(r,"bell",175,290,120);
@@ -768,7 +798,7 @@ namespace ul::menu::ui {
                     default:ShowAlbum();break;
                 }break;
             case 3:SetPage(Page::Settings);break;
-            case 4:ShowPowerDialog();break;
+            case 4:OpenPowerSheet();break;
         }
     }
     void GlassShell::RenderDock(Renderer &r){
@@ -996,7 +1026,7 @@ namespace ul::menu::ui {
             const float light=std::max(0.f,1.f-std::abs(d+2.5f)/3.f);
             const float u=float(px)/tw;
             const float angle=.20f+.80f*(1-v)*(1-v);
-            const float lower=std::max(0.f,(v-.70f)/.30f)*(0.26f+0.75f*u);
+            const float lower=std::max(0.f,(v-.70f)/.30f)*(0.27f+0.75f*u);
             const float edge_shadow=std::max(0.f,1.f-std::abs(d+2.f)/3.f)*lower;
             const float reflection=std::max(0.f,1.f-std::abs(float(px)/tw+v*.55f-.4f)/.23f);
             const float shine=(1.f-v)*.052f+reflection*.095f+rim*(selected?.78f:.61f)*angle+light*.065f+rim*lower*.20f;
@@ -1430,9 +1460,12 @@ namespace ul::menu::ui {
                         row("Internet settings","Connection setup",[](){ShowNetConnect();});
                         row("Advanced network options","Full settings",[](){ShowSettingsMenu();});break;
                     case 4:
-                        row("Power options","Sleep, restart, shutdown",[](){ShowPowerDialog();});
+                        row("Power center","Sleep, restart, shutdown",[this](){OpenPowerSheet();});
                         row("Control Center","Display and sound",[this](){SetPage(Page::Control);});
-                        row("Lock screen","Lock now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);});break;
+                        row("Lock screen","Lock now",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);});
+                        row("Lock screen previews",ul::glassnx::HideLockscreenPreviews()?"Hidden":"Visible",[](){
+                            if(!ul::glassnx::SetHideLockscreenPreviews(!ul::glassnx::HideLockscreenPreviews()))g_MenuApplication->ShowNotification("Could not save lock screen preference");
+                        });break;
                     case 5:
                         row("SD card",StorageText(),noop);
                         row("Total capacity",total_bytes>0?std::to_string(total_bytes/1073741824LL)+" GiB":"Unavailable",noop);
@@ -1458,7 +1491,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.26",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.27",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1480,7 +1513,7 @@ namespace ul::menu::ui {
                {100,270,195,190,"Wi-Fi",g_GlobalSettings.wireless_lan_enabled?"On":"Off",[this](){ToggleRadio(true);}},
                {320,270,195,190,"Bluetooth",g_GlobalSettings.bluetooth_enabled?"On":"Off",[this](){ToggleRadio(false);}},
                {540,270,195,190,"Controllers","",[](){ShowController();}},
-               {100,485,195,190,"Power","",[](){ShowPowerDialog();}},
+               {100,485,195,190,"Power","",[this](){OpenPowerSheet();}},
                {320,485,195,190,"Quiet",g_MenuApplication->IsQuietMode()?"On":"Off",[](){g_MenuApplication->SetQuietMode(!g_MenuApplication->IsQuietMode());}},
                {540,485,195,190,"Lock","",[](){g_MenuApplication->LoadMenu(MenuType::Lockscreen);}},
                {100,770,635,175,"Notifications","Recent alerts",[this](){SetPage(Page::Notifications);}},
