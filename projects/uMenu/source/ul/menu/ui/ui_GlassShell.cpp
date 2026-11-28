@@ -53,7 +53,7 @@ namespace ul::menu::ui {
     bool GlassShell::Conservative() const {return safe_mode||g_GlobalSettings.IsSuspended();}
     void GlassShell::ClearMaterials(){materials.clear();material_bytes=0;}
     void GlassShell::PrepareTransition(){
-        CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;
+        CloseHub();CloseGallery();keyboard_open=false;keyboard_draft.clear();close_sheet=false;dock_focus=-1;
         liquid_glass.Release();ClearMaterials();texts.clear();custom_icons.clear();banner.reset();hero_frost.reset();banner_checked=false;
         theme_previews.clear();drag_slider=-1;focus_lift=0;focus_velocity=0;nav_velocity=0;dock_lift.fill(0);dock_velocity.fill(0);
         next_metrics=std::chrono::steady_clock::now()+std::chrono::seconds(30);
@@ -341,29 +341,152 @@ namespace ul::menu::ui {
         auto value=tex?pu::sdl2::TextureHandle::New(tex):pu::sdl2::TextureHandle::Ref{};
         custom_icons.emplace(id,value);return value;
     }
-    void GlassShell::TitleOptions() {
-        auto list=List();
+    int GlassShell::HubEntry(){
+        auto &all=entries->GetEntries();
+        for(size_t i=0;i<all.size();++i)
+            if(all[i].Is<EntryType::Application>()&&all[i].app_info.app_id==hub_id)return static_cast<int>(i);
+        return -1;
+    }
+    void GlassShell::CloseHub(){
+        if(!hub_mode)return;
+        hub_mode=0;hub_focus=0;hub_id=0;hits.clear();touched=true;
+    }
+    void GlassShell::TitleOptions(){
+        const auto list=List();
         if(focus<0||focus>=static_cast<int>(list.size()))return;
-        auto &e=entries->GetEntries()[list[focus]];
+        const auto &e=entries->GetEntries()[list[focus]];
         if(!e.Is<EntryType::Application>()){
-            g_MenuApplication->ShowNotification("Title categories apply to installed applications.");return;
+            g_MenuApplication->ShowNotification("Game Hub is available for installed titles.");return;
         }
-        const auto id=e.app_info.app_id;
-        char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(id));
-        const std::string detail=std::string("Title ID: ")+hex+"\nUse Game or App to organize your library.";
-        const auto choice=g_MenuApplication->DisplayDialog(EntryName(e),detail,{"Game","App","Automatic","Change artwork","Cancel"},true);
-        if(choice==3){EditArtwork(id,EntryName(e));return;}
-        if(choice<0||choice>2)return;
+        hub_id=e.app_info.app_id;hub_mode=1;hub_focus=0;hits.clear();touched=true;
+    }
+    void GlassShell::OpenProfileOverview(){
+        hub_mode=2;hub_focus=0;hub_id=0;hits.clear();touched=true;
+    }
+    void GlassShell::SetHubCategory(int category){
+        const u64 id=hub_id;
+        if(!id||HubEntry()<0||category<0||category>2)return;
         const auto old=title_categories;
-        if(choice==2)title_categories.erase(id);
-        else {
-            if(title_categories.size()>=1024 && !title_categories.count(id))return;
-            title_categories[id]=choice==0?1:2;
+        if(category==0)title_categories.erase(id);
+        else{
+            if(title_categories.size()>=1024&&!title_categories.count(id)){
+                g_MenuApplication->ShowNotification("Library category limit reached");return;
+            }
+            title_categories[id]=category;
         }
         if(!SaveCategories()){
             title_categories=old;g_MenuApplication->ShowNotification("Could not save title category");return;
         }
-        focus=offset=0;g_MenuApplication->ShowNotification("Library category saved");
+        CloseHub();focus=offset=0;
+        g_MenuApplication->ShowNotification("Library category saved");
+    }
+    void GlassShell::HubAction(int action){
+        if(hub_mode==2){
+            if(action==0){CloseHub();ShowUserPage();}
+            else if(action==1){CloseHub();SetPage(Page::Library);filter=1;focus=offset=0;}
+            else if(action==2){CloseHub();SetPage(Page::Library);filter=3;focus=offset=0;}
+            else CloseHub();
+            return;
+        }
+        if(hub_mode==3){
+            if(action>=0&&action<=2)SetHubCategory(action);
+            else {hub_mode=1;hub_focus=3;hits.clear();touched=true;}
+            return;
+        }
+        const int idx=HubEntry();
+        if(idx<0){CloseHub();return;}
+        auto &e=entries->GetEntries()[idx];
+        const u64 id=hub_id;
+        if(action==0){CloseHub();launch(static_cast<u32>(idx));}
+        else if(action==1){
+            const auto it=std::find(favorites.begin(),favorites.end(),id);
+            if(it!=favorites.end()){favorites.erase(it);g_MenuApplication->ShowNotification("Removed from favorites");}
+            else if(favorites.size()<512){favorites.push_back(id);g_MenuApplication->ShowNotification("Added to favorites");}
+            else{g_MenuApplication->ShowNotification("Favorite limit reached");return;}
+            SavePreferences();
+        }else if(action==2){
+            if(Conservative()){g_MenuApplication->ShowNotification("Close the game and disable Safe Mode to edit artwork");return;}
+            const auto name=EntryName(e);CloseHub();EditArtwork(id,name);
+        }else if(action==3){hub_mode=3;hub_focus=0;hits.clear();touched=true;}
+        else CloseHub();
+    }
+    void GlassShell::HubInput(u64 down,pu::ui::TouchPoint touch){
+        if(down&HidNpadButton_B){
+            if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}
+            else CloseHub();
+            return;
+        }
+        if(touch.IsEmpty())touched=false;
+        else if(!touched){
+            touched=true;
+            for(const auto &hit:hits)if(touch.HitsRegion(hit.x,hit.y,hit.w,hit.h)){
+                auto cb=hit.action;cb();return;
+            }
+        }
+        const int last=hub_mode==1?4:3;
+        if(down&(HidNpadButton_Up|HidNpadButton_StickLUp|HidNpadButton_Left|HidNpadButton_StickLLeft))hub_focus=std::max(0,hub_focus-1);
+        else if(down&(HidNpadButton_Down|HidNpadButton_StickLDown|HidNpadButton_Right|HidNpadButton_StickLRight))hub_focus=std::min(last,hub_focus+1);
+        else if(down&HidNpadButton_A)HubAction(hub_focus);
+    }
+    void GlassShell::RenderHub(Renderer &r){
+        hits.clear();
+        r->RenderRectangleFill({11,19,42,145},0,0,1920,1080);
+        ul::glassnx::DrawSurface(r,95,80,1730,920,48,{23,34,61,232});
+        const auto row=[&](int i,const std::string &label,const std::string &detail){
+            const int x=1070,y=235+i*132,w=695,h=110;
+            ul::glassnx::DrawSurface(r,x,y,w,h,26,hub_focus==i?pu::ui::Color{79,117,175,235}:pu::ui::Color{43,58,91,210},hub_focus==i);
+            Label(r,label,x+28,y+12,37,w-60);
+            Label(r,detail,x+28,y+61,27,w-60);
+            hits.push_back({x,y,w,h,[this,i](){hub_focus=i;HubAction(i);}});
+        };
+        Button(r,1490,112,275,82,"B  Back",false,[this](){if(hub_mode==3){hub_mode=1;hub_focus=3;hits.clear();touched=true;}else CloseHub();});
+        if(hub_mode==2){
+            Label(r,"Your collection",155,123,64,1200);
+            RoundedArt(r,GetSelectedUserIconTexture(),180,260,230,230,114);
+            Label(r,"GlassNX profile",155,535,45,870);
+            Label(r,"Collection overview",155,600,37,870);
+            Label(r,std::to_string(favorites.size())+" saved favorites",155,685,37,870);
+            Label(r,std::to_string(recent.size())+" recent unique titles",155,755,37,870);
+            Label(r,"Shared within this console environment",155,840,27,870);
+            row(0,"Nintendo profile","Open account and profile settings");
+            row(1,"Favorites","Browse your saved games");
+            row(2,"Recently played","Browse recorded launch history");
+            row(3,"Back","Return to your previous screen");
+            return;
+        }
+        const int idx=HubEntry();
+        if(idx<0){CloseHub();return;}
+        auto &e=entries->GetEntries()[idx];
+        Label(r,hub_mode==3?"Library category":"Game Hub",155,123,64,1200);
+        const bool suspended=g_GlobalSettings.IsEntrySuspended(e);
+        auto wide=Conservative()?pu::sdl2::TextureHandle::Ref{}:Banner(hub_id);
+        auto icon=CustomIcon(hub_id);
+        if(!icon)icon=entries->GlassIcon(static_cast<u32>(idx),icon_budget);
+        if(!icon)icon=GetDefaultApplicationIconTexture();
+        ul::glassnx::DrawSurface(r,155,235,855,360,36,{39,52,86,180});
+        if(wide)RoundedArt(r,wide,165,245,835,340,28);
+        else if(icon)RoundedArt(r,icon,412,250,340,340,48);
+        Label(r,EntryName(e),155,635,45,855);
+        Label(r,suspended?"Suspended":std::find(recent.begin(),recent.end(),hub_id)!=recent.end()?"In recent launch history":"Installed title",155,704,37,855);
+        char hex[24]={};snprintf(hex,sizeof(hex),"%016llx",static_cast<unsigned long long>(hub_id));
+        Label(r,std::string("Title ID  ")+hex,155,770,27,855);
+        const auto category=title_categories.find(hub_id);
+        const int value=category==title_categories.end()?0:category->second;
+        const std::string category_name=value==1?"Game":value==2?"App":"Automatic";
+        Label(r,"Category  /  "+category_name,155,825,30,855);
+        Label(r,"A Select   B Back   D-pad Navigate",155,925,27,900);
+        if(hub_mode==3){
+            row(0,"Automatic",value==0?"Current category":"Use detected title type");
+            row(1,"Game",value==1?"Current category":"Show in game library");
+            row(2,"App",value==2?"Current category":"Show in app library");
+            row(3,"Cancel","Keep current category");
+        }else{
+            row(0,suspended?"Resume":"Launch","Open this title");
+            row(1,Favorite(hub_id)?"Remove favorite":"Add favorite","Personalize your collection");
+            row(2,"Artwork Studio",Conservative()?"Unavailable in conservative mode":"Cover and hero customization");
+            row(3,"Library category",category_name);
+            row(4,"Back","Return to your previous screen");
+        }
     }
     void GlassShell::ReadRecent() {
         const std::string path=std::string(PrefsPath())+".recent";
@@ -1266,7 +1389,7 @@ namespace ul::menu::ui {
                             else {remove("sdmc:/glassnx/titles.tsv.tmp");g_MenuApplication->ShowNotification("Title export failed");}
                         });break;
                     case 7:
-                        row("GlassNX","Version 0.24",[](){ShowAboutDialog();});
+                        row("GlassNX","Version 0.25",[](){ShowAboutDialog();});
                         row("Backend","Based on XorTroll's uLaunch",noop);
                         row("Safe rendering",safe_mode?"Enabled":"Disabled",[this](){ToggleSafeMode();});
                         row("Enhanced GPU glass",enhanced_glass?"Enabled (experimental)":"Disabled",[this](){ToggleEnhancedGlass();});
@@ -1323,6 +1446,7 @@ namespace ul::menu::ui {
     }
     void GlassShell::HandleInput(u64 down,pu::ui::TouchPoint touch) {
         if(gallery.active){GalleryInput(down,touch);return;}
+        if(hub_mode){HubInput(down,touch);return;}
         if(close_sheet){CloseSheetInput(down,touch);return;}
         if(keyboard_open){KeyboardInput(down,touch);return;}
         if(touch.IsEmpty()) {
@@ -1370,6 +1494,7 @@ namespace ul::menu::ui {
         if((page==Page::Home||page==Page::Library||page==Page::Apps) && (down&HidNpadButton_StickR)){if(dock_focus<0)TitleOptions();return;}
         if(down&HidNpadButton_X) {
             if(page==Page::Home && g_GlobalSettings.IsSuspended()){OpenCloseSheet();return;}
+            if(page==Page::Home){OpenProfileOverview();return;}
             if(page==Page::Library||page==Page::Apps){Search();return;}
         }
         if(page==Page::Home){
@@ -1461,12 +1586,13 @@ namespace ul::menu::ui {
         Picture(r,ActiveWallpaper(),0,0,1920,1080);
         const auto scrim=WallpaperTint();if(scrim.a)r->RenderRectangleFill(scrim,0,0,1920,1080);
         if(gallery.active){RenderGallery(r);return;}
+        if(hub_mode){RenderHub(r);return;}
         RoundedArt(r,GetSelectedUserIconTexture(),44,24,76,76,37);
         r->RenderCircle({228,238,255,135},82,62,39);
         Label(r,"GlassNX",132,25,45,380);
         const char *contexts[]={"Your space","Game collection","Apps & utilities","Personalize","Quick controls","Activity"};
         Label(r,safe_mode?"SAFE MODE":contexts[static_cast<int>(page)],134,76,27,395);
-        hits.push_back({44,24,430,76,[](){ShowUserPage();}});
+        hits.push_back({44,24,430,76,[this](){OpenProfileOverview();}});
         Card(r,555,25,810,78);
         const char *tabs[]={"Home","Library","Apps","Settings"};
         const char *navicons[]={"home","games","apps","settings"};
@@ -1556,17 +1682,17 @@ namespace ul::menu::ui {
                     ul::glassnx::DrawSurface(r,380,445,300,78,38,{144,62,96,180});
                     Label(r,"X  Close game",530,467,30,270,true);
                     hits.push_back({380,445,300,78,[this](){OpenCloseSheet();}});
-                } else Button(r,380,445,300,78,"Game options",false,[this](){TitleOptions();});
+                } else Button(r,380,445,300,78,"Game Hub",false,[this](){TitleOptions();});
             } else {
                 Label(r,"Your home awaits",112,245,64);
                 Label(r,"Add games and organize your collection.",112,355,30);
                 Button(r,112,445,360,78,"Manage entries",false,legacy);
             }
             Label(r,"Game shelf",75,600,37);
-            Label(r,dock_focus>=0?"A Open  ·  Up / B Back":"R Stick Options   ·   Down Dock",385,606,27,570);
+            Label(r,dock_focus>=0?"A Open  ·  Up / B Back":"R Stick Hub   ·   Down Dock",385,606,27,570);
             IconButton(r,1000,590,240,52,"search","Y Search",false,[this](){dock_focus=-1;Search();});
             Label(r,std::to_string(list.size())+" titles",1635,606,27,205);
-            if(g_GlobalSettings.IsSuspended())Label(r,"X  Close game",1260,606,27,300);
+            Label(r,g_GlobalSettings.IsSuspended()?"X  Close game":"X  Profile",1260,606,27,300);
             for(int i=0;i<5&&offset+i<static_cast<int>(list.size());++i)Tile(r,list[offset+i],70+i*360,648,340,250,dock_focus<0&&focus==offset+i);
             const int pages=int((list.size()+4)/5);
             if(pages>9){
@@ -1608,7 +1734,7 @@ namespace ul::menu::ui {
                 const int columns=games?5:6;
                 Tile(r,list[offset+i],(games?400:88)+(i%columns)*(games?290:293),(games?320:389)+(i/columns)*(games?310:280),275,games?292:270,focus==offset+i);
             }
-            Label(r,all_entries?"Y Clear search   X Edit search   B Home   A Open":games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Options   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
+            Label(r,all_entries?"Y Clear search   X Edit search   B Home   A Open":games?"L/R Pages   Y Filter   X Search   L Stick Favorite   R Stick Hub   A Open":"L/R Pages   Y Filter   X Search   R Stick Options   A Open",70,1005,27,1580);
             if(static_cast<int>(list.size())>capacity)Label(r,std::to_string(offset/capacity+1)+"/"+std::to_string((list.size()+capacity-1)/capacity),1720,1005,30);
         } else if(page==Page::Settings || page==Page::Control || page==Page::Notifications) {
             const bool settings=page==Page::Settings,control=page==Page::Control;
