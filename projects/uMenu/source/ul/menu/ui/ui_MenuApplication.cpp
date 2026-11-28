@@ -281,8 +281,8 @@ namespace ul::menu::ui {
         }
 
         this->EnsureLayoutCreated(type);
-        if(type!=MenuType::Settings&&this->settings_menu_lyt)this->settings_menu_lyt->SetBackgroundImage(GetBackgroundTexture());
-        if(type!=MenuType::Themes&&this->themes_menu_lyt)this->themes_menu_lyt->SetBackgroundImage(GetBackgroundTexture());
+        if(type!=MenuType::Settings&&this->settings_menu_lyt)this->settings_menu_lyt->SetPrismWallpaper({});
+        if(type!=MenuType::Themes&&this->themes_menu_lyt)this->themes_menu_lyt->SetPrismWallpaper({});
         
         switch(type) {
             case MenuType::Startup: {
@@ -296,14 +296,14 @@ namespace ul::menu::ui {
                 break;
             }
             case MenuType::Settings: {
-                if(this->main_menu_lyt)this->settings_menu_lyt->SetBackgroundImage(this->main_menu_lyt->AppearanceWallpaper());
+                this->settings_menu_lyt->SetPrismWallpaper(this->main_menu_lyt?this->main_menu_lyt->AppearanceWallpaper():GetBackgroundTexture());
                 this->settings_menu_lyt->Rewind();
                 this->settings_menu_lyt->Reload(false);
                 this->LoadLayout(this->settings_menu_lyt);
                 break;
             }
             case MenuType::Themes: {
-                if(this->main_menu_lyt)this->themes_menu_lyt->SetBackgroundImage(this->main_menu_lyt->AppearanceWallpaper());
+                this->themes_menu_lyt->SetPrismWallpaper(this->main_menu_lyt?this->main_menu_lyt->AppearanceWallpaper():GetBackgroundTexture());
                 this->themes_menu_lyt->Reload();
                 this->LoadLayout(this->themes_menu_lyt);
                 break;
